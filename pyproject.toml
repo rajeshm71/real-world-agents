@@ -18,15 +18,13 @@ dev = [
     "pytest>=8.0",
 ]
 
-# NOTE: SPEC.md §3 requires [tool.uv.workspace] with agents/* as members.
-# Deferred to F1.2 when the first agent (receipt extractor) is added --
-# declaring a workspace with zero members is noise. When the first agent
-# lands, add:
-#   [tool.uv.workspace]
-#   members = ["agents/*"]
-# `common/` remains part of the root package rather than its own workspace
-# member (simpler, avoids a redundant common/pyproject.toml duplicating
-# the same deps).
+# uv workspace: agents/ are independent workspace members with their own
+# pyproject.toml. `common/` stays as a subpackage of the root package (not
+# its own workspace member) to avoid a redundant common/pyproject.toml
+# duplicating deps. Agents that import from common/ do so via the root
+# package via the `real-world-agents = { workspace = true }` source.
+[tool.uv.workspace]
+members = ["agents/*"]
 
 [build-system]
 requires = ["hatchling"]
@@ -46,5 +44,14 @@ target-version = "py311"
 # Same policy as sibling rag-recipes project.
 ignore = ["BLE001"]
 
+[tool.ruff.lint.per-file-ignores]
+# Agent directories follow SPEC.md §8's NN_name convention (01_receipt_extractor,
+# 02_contract_reviewer, etc.) — progressive-complexity ladder for readers.
+# The digit prefix means the directory name isn't a valid Python identifier,
+# so tests import via importlib. N999 is expected and intentional.
+"agents/*/__init__.py" = ["N999"]
+"agents/*/tests/__init__.py" = ["N999"]
+"agents/*/tests/*.py" = ["N999"]
+
 [tool.pytest.ini_options]
-testpaths = ["common/tests"]
+testpaths = ["common/tests", "agents"]
