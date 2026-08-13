@@ -1,0 +1,49 @@
+name: New agent proposal
+description: Propose a new agent for the catalog
+title: "[new agent]: "
+labels: ["new-agent"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a new agent! Please read [SPEC.md](../../SPEC.md) §7
+        (the roadmap and its "excluded" list) and §17 (R1, R3) before filling
+        this out — the questions below exist to check both bars up front.
+  - type: textarea
+    id: task
+    attributes:
+      label: What task does this agent solve?
+      description: Be specific about the real-world use case, not just the technique.
+      placeholder: "e.g. Extracts action items from meeting transcripts and assigns owners"
+    validations:
+      required: true
+  - type: textarea
+    id: real-users
+    attributes:
+      label: Who uses this in real life?
+      description: Name the actual person/role/business that would use this today.
+      placeholder: "e.g. Project managers who run weekly syncs and need follow-through tracking"
+    validations:
+      required: true
+  - type: textarea
+    id: technique
+    attributes:
+      label: What technique/framework does this demonstrate?
+      description: Must be a technique not already covered by another agent (SPEC.md R3). Check the roadmap table first.
+      placeholder: "e.g. ReAct pattern via OpenAI Agents SDK"
+    validations:
+      required: true
+  - type: textarea
+    id: why-framework
+    attributes:
+      label: Why is this framework the right fit for this task?
+      description: Not "let's use X because it's popular" — explain what the pattern actually needs.
+    validations:
+      required: true
+  - type: textarea
+    id: competitors
+    attributes:
+      label: What's the closest existing OSS competitor, and how does this differ?
+      description: See SPEC.md §7's "excluded" list for the level of scrutiny expected here. If this collides head-on with a dominant project, it likely won't be accepted.
+    validations:
+      required: true

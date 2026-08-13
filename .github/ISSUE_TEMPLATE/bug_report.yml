@@ -1,0 +1,38 @@
+name: Bug report
+description: Something in an agent, common/, or the tooling is broken
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Where is the bug?
+      description: Which agent (e.g. agents/01_receipt_extractor/), or common/, or a script.
+      placeholder: "agents/01_receipt_extractor/agent.py"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact command you ran and the full error output if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: mock-or-real
+    attributes:
+      label: Did this happen under LLM_PROVIDER=mock or a real provider?
+      options:
+        - "mock"
+        - "openai"
+        - "anthropic"
+        - "gemini"
+        - "not sure"
+    validations:
+      required: true

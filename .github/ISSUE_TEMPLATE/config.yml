@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/rajeshm71/real-world-agents/discussions
+    about: For "which pattern should I use" or general questions, not a specific bug or proposal.

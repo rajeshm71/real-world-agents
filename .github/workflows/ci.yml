@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# R8: CI is mock-only. No real API key is ever referenced or needed as a
+# secret for any job below.
+env:
+  LLM_PROVIDER: mock
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned to an immutable full version, not a floating major tag --
+      # astral-sh/setup-uv stopped publishing floating tags (e.g. @v9/@v10)
+      # as of their own v8.0.0; only exact versions like @v10.0.0 are
+      # available now. Verified current 2026-08-13 against the action's
+      # own release notes.
+      - uses: astral-sh/setup-uv@v10.0.0
+      - run: uv python install 3.12
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run python scripts/lint_agents.py
+      - run: uv run python scripts/lint_readme.py
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.0.0
+      - run: uv python install 3.12
+      - run: uv sync
+      # Covers common/tests/ (SPEC §12 job 2) and every agents/*/tests/
+      # test_smoke.py (SPEC §12 job 3) in one run -- pyproject.toml's
+      # testpaths already lists all three directories (common/tests,
+      # agents, tests), so a single `pytest` invocation exercises the
+      # whole suite. Any exception in any agent's smoke test fails this job.
+      - run: uv run pytest
