@@ -20,20 +20,34 @@ explicitly (see extract_receipt below):
   3. Partial extraction (validation fails after all retries) -> raise
      ReceiptExtractionError with the raw model output attached so the caller
      can show it as a warning banner
+
+LLM_PROVIDER env-var semantics (documented per F1.2 review S8, differs from
+common/llm.py's factory on purpose):
+  - LLM_PROVIDER="mock" -> use _mock_extraction() (no network, no key)
+  - anything else -> real Anthropic call via Instructor
+This agent is Anthropic-only by design (Claude vision + Instructor). Setting
+LLM_PROVIDER=openai does NOT route to OpenAI here -- it's treated as "not
+mock" and falls through to Anthropic. Documented as a per-agent semantic;
+common/llm.py's cross-provider routing applies only to agents that use
+common/llm.py, which this one doesn't (Instructor sits directly on Anthropic).
+
+Currently ships image-only (JPEG/PNG/WebP/GIF). PDF support promised by
+SPEC.md §6.2 is tracked in tasks/todo.md as a prerequisite for F1.5 --
+Anthropic's `document` content block will handle it natively.
 """
 
 from __future__ import annotations
 
 import base64
-import logging
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .schemas import ExtractedReceipt
-
-logger = logging.getLogger(__name__)
+from .schemas import (  # F1.2 review S3: LineItem now imported at top instead of inside _mock_extraction
+    ExtractedReceipt,
+    LineItem,
+)
 
 # --- Model + prompt ---
 
@@ -153,9 +167,27 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
     ReceiptExtractionError. Handles the three R5-required cases; anything
     unrecognized bubbles up as a generic ExtractionError with the original
     exception text preserved for debugging.
+
+    Priority order (F1.2 review S9: check exception CLASS before message
+    strings to prevent misclassification when a validation error happens to
+    contain words like "overloaded" or "invalid image" in its body):
+      1. Validation error (by class name) -> case 3, attach raw output
+      2. HTTP status code 400 or bad-image message -> case 1
+      3. HTTP status code 429 or rate-limit/overloaded message -> case 2
+      4. Legacy validation-shaped message (fallback) -> case 3
+      5. Fallback: preserve original exception details for debugging
     """
+    exc_class_name = type(exc).__name__.lower()
     message_lower = str(exc).lower()
     status = getattr(exc, "status_code", None)
+
+    # Case 3 (checked FIRST per S9): schema validation failure. Instructor's
+    # ValidationError / InstructorValidationError / pydantic's ValidationError
+    # all contain "validationerror" in the class name. Message typically
+    # includes the raw model output; attach it as `partial` so the UI can
+    # surface it in a warning banner.
+    if "validationerror" in exc_class_name:
+        return _build_validation_error(exc)
 
     # Case 1: malformed / unreadable image (Anthropic returns 400 with
     # "invalid image" or similar in the body).
@@ -165,7 +197,7 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
             "Try a clearer photo or a different file format (JPEG/PNG)."
         )
 
-    # Case 2: rate limit / transient API failure — Instructor's max_retries
+    # Case 2: rate limit / transient API failure -- Instructor's max_retries
     # already tried; if we're here, retries are exhausted.
     if status == 429 or "rate limit" in message_lower or "overloaded" in message_lower:
         return ReceiptExtractionError(
@@ -173,23 +205,34 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
             "Wait a minute and try again."
         )
 
-    # Case 3: schema validation failure after all retries. Instructor's
-    # ValidationError message typically includes the raw model output;
-    # attach it as `partial` so the UI can surface it in a warning banner.
-    if "validationerror" in type(exc).__name__.lower() or "validation" in message_lower:
-        raw = getattr(exc, "raw_output", None) or str(exc)
-        errors = getattr(exc, "errors", lambda: [str(exc)])()
-        error_strs = [str(e) for e in errors] if isinstance(errors, list) else [str(errors)]
-        return ReceiptExtractionError(
-            "Extracted data didn't match the expected receipt schema. "
-            "The model's raw output is attached — you can inspect it below.",
-            partial=ExtractionAttempt(raw_text=str(raw), validation_errors=error_strs),
-        )
+    # Fallback validation-shape detection (rare -- an exception whose class
+    # name doesn't include "ValidationError" but whose message does).
+    if "validation" in message_lower:
+        return _build_validation_error(exc)
 
     # Fallback: unknown error class. Preserve original message for debugging.
     return ReceiptExtractionError(
         f"Extraction failed: {type(exc).__name__}: {exc}. "
-        "This is an unexpected error — check the agent logs."
+        "This is an unexpected error -- check the agent logs."
+    )
+
+
+def _build_validation_error(exc: Exception) -> ReceiptExtractionError:
+    """Extracted from _translate_api_error (F1.2 review S9) so both the
+    class-name path and the message-fallback path build the same partial-
+    attempt structure. Instructor exceptions carry `raw_output` (raw text
+    the model returned) and `errors()` (list of validation errors)."""
+    raw = getattr(exc, "raw_output", None) or str(exc)
+    errors_attr = getattr(exc, "errors", None)
+    if callable(errors_attr):
+        errors = errors_attr()
+    else:
+        errors = [str(exc)]
+    error_strs = [str(e) for e in errors] if isinstance(errors, list) else [str(errors)]
+    return ReceiptExtractionError(
+        "Extracted data didn't match the expected receipt schema. "
+        "The model's raw output is attached -- you can inspect it below.",
+        partial=ExtractionAttempt(raw_text=str(raw), validation_errors=error_strs),
     )
 
 
@@ -214,8 +257,7 @@ def _mock_extraction(image_bytes: bytes) -> ExtractedReceipt:
     Returns a fixed ExtractedReceipt without ever calling Instructor or
     Anthropic. Byte length of the input drives one field so tests can verify
     "the mock actually saw the input" if they want to."""
-    from .schemas import LineItem
-
+    # F1.2 review S3: LineItem now imported at module top; local import removed.
     return ExtractedReceipt(
         vendor_name="Mock Vendor Ltd.",
         currency="USD",
@@ -246,7 +288,17 @@ def main() -> int:
         "Set LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY for a real call, "
         "or LLM_PROVIDER=mock for a canned response.",
     )
-    parser.add_argument("image", type=Path, help="Path to a receipt image (JPEG/PNG).")
+    # F1.2 review S1: `image` was a required positional, so `python -m agent
+    # --ui` failed with "the following arguments are required: image."
+    # Made optional (nargs="?") so --ui works standalone; when not using
+    # --ui, absence of `image` produces a clear parser.error() message.
+    parser.add_argument(
+        "image",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="Path to a receipt image (JPEG/PNG/WebP/GIF). Omit when using --ui.",
+    )
     parser.add_argument("--ui", action="store_true", help="Launch Gradio UI instead of CLI.")
     args = parser.parse_args()
 
@@ -255,6 +307,10 @@ def main() -> int:
 
         build_ui().launch()
         return 0
+
+    if args.image is None:
+        parser.error("image path is required (or pass --ui to launch the web interface)")
+        return 2  # unreachable; parser.error() exits
 
     if not args.image.exists():
         print(f"error: image not found: {args.image}", file=sys.stderr)

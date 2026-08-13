@@ -12,7 +12,6 @@ Space, as the container's entry point.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from pathlib import Path
@@ -27,8 +26,9 @@ from .agent import (
     extract_receipt,
 )
 
-logger = logging.getLogger(__name__)
-
+# F1.2 review S3: `logging` import + unused `logger` removed. If we later
+# need per-request logging in the UI, add `import logging` back at that
+# point.
 
 _EXAMPLES_DIR = Path(__file__).parent / "examples"
 
@@ -62,9 +62,12 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     except ReceiptExtractionError as exc:
         # R5 case 3: partial extraction. If we have raw model output, show it
         # in the warning banner so the user isn't left with nothing.
-        warning = f"⚠️  {exc.message}"
+        # F1.2 review S3: emoji removed (violates CLAUDE.md "no emojis unless
+        # explicitly requested"). Using bold "**Extraction failed:**" instead
+        # -- still visually prominent in Gradio's Markdown component.
+        warning = f"**Extraction failed:** {exc.message}"
         if exc.partial is not None:
-            warning += f"\n\nRaw model output:\n{exc.partial.raw_text}"
+            warning += f"\n\nRaw model output:\n\n```\n{exc.partial.raw_text}\n```"
         return "", "", warning
 
     elapsed_ms = (time.perf_counter() - start) * 1000

@@ -10,8 +10,12 @@ dependencies = [
     "anthropic>=0.121",
     "pydantic>=2.5",
     "gradio>=4.44",
-    "pillow>=10.4",
-    "pypdf>=4.3",
+    # F1.2 review S2: pypdf + pillow removed -- both were declared but never
+    # imported. pillow comes in transitively via gradio when needed. pypdf
+    # will be added back when PDF support is implemented (tracked in
+    # tasks/todo.md as a prerequisite for F1.5 -- Anthropic supports PDFs
+    # natively via `document` content blocks, so we may not need pypdf at
+    # all; decision deferred to the F1.5 real-provider verification pass).
 ]
 
 [dependency-groups]
