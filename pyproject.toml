@@ -9,6 +9,7 @@ authors = [{ name = "Rajesh Mane", email = "rajeshmane711@gmail.com" }]
 dependencies = [
     "openai>=1.50",
     "anthropic>=0.121",
+    "google-genai>=1.0",  # SPEC R6 bumped 3->4: multi-provider support (user request)
     "pydantic>=2.5",
 ]
 

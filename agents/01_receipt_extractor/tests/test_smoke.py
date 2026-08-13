@@ -41,6 +41,9 @@ extract_receipt = _agent_pkg.extract_receipt
 ReceiptExtractionError = _agent_pkg.ReceiptExtractionError
 ExtractionAttempt = _agent_pkg.ExtractionAttempt
 _translate_api_error = _agent_pkg._translate_api_error
+resolve_provider = _agent_pkg.resolve_provider
+_build_image_content = _agent_pkg._build_image_content
+SUPPORTED_PROVIDERS = _agent_pkg.SUPPORTED_PROVIDERS
 ExtractedReceipt = _schemas_pkg.ExtractedReceipt
 LineItem = _schemas_pkg.LineItem
 
@@ -187,6 +190,75 @@ def test_unknown_error_class_falls_back_gracefully():
 
 
 # ---------- Prompt file ----------
+
+
+# ---------- Provider resolution (multi-provider support, user request) ----------
+
+
+def test_resolve_provider_defaults_to_openai(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    assert resolve_provider() == "openai"
+
+
+def test_resolve_provider_respects_env_var(monkeypatch):
+    for provider in SUPPORTED_PROVIDERS:
+        monkeypatch.setenv("LLM_PROVIDER", provider)
+        assert resolve_provider() == provider
+
+
+def test_resolve_provider_allows_mock(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    assert resolve_provider() == "mock"
+
+
+def test_resolve_provider_rejects_unknown_value(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "not-a-real-provider")
+    with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
+        resolve_provider()
+
+
+def test_extract_receipt_provider_kwarg_overrides_env(monkeypatch):
+    """Passing provider="mock" explicitly must bypass whatever LLM_PROVIDER
+    is set to -- this is what lets the CLI's --provider flag work per-call
+    without mutating the environment."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    result = extract_receipt(b"x" * 50, provider="mock")
+    assert isinstance(result, ExtractedReceipt)
+
+
+# ---------- Image content-block construction (per-provider) ----------
+
+
+def test_build_image_content_anthropic_shape():
+    content = _build_image_content("anthropic", "image/png", "ZmFrZQ==", "extract this")
+    assert content[0]["type"] == "image"
+    assert content[0]["source"]["type"] == "base64"
+    assert content[0]["source"]["media_type"] == "image/png"
+    assert content[0]["source"]["data"] == "ZmFrZQ=="
+    assert content[1] == {"type": "text", "text": "extract this"}
+
+
+def test_build_image_content_openai_shape():
+    content = _build_image_content("openai", "image/jpeg", "ZmFrZQ==", "extract this")
+    assert content[0]["type"] == "image_url"
+    assert content[0]["image_url"]["url"] == "data:image/jpeg;base64,ZmFrZQ=="
+    assert content[1] == {"type": "text", "text": "extract this"}
+
+
+def test_build_image_content_gemini_uses_openai_shaped_fallback():
+    """Gemini path is explicitly unverified (see agent.py module docstring)
+    -- pins CURRENT behavior (same shape as OpenAI) so a future change is
+    a deliberate decision, not an accidental drift."""
+    content = _build_image_content("gemini", "image/png", "ZmFrZQ==", "extract this")
+    assert content[0]["type"] == "image_url"
+
+
+def test_build_image_content_every_supported_provider_produces_two_blocks():
+    for provider in SUPPORTED_PROVIDERS:
+        content = _build_image_content(provider, "image/png", "ZmFrZQ==", "prompt text")
+        assert len(content) == 2
+        assert content[1]["type"] == "text"
+        assert content[1]["text"] == "prompt text"
 
 
 def test_prompt_file_exists_and_is_nonempty():

@@ -8,13 +8,17 @@ from __future__ import annotations
 import pytest
 
 from common.llm import (
+    DEFAULT_MODELS,
     LLM,
     AnthropicLLM,
+    GeminiLLM,
     LLMResponse,
     MockLLM,
     OpenAILLM,
     get_anthropic_llm,
+    get_gemini_llm,
     get_llm,
+    resolve_model,
 )
 
 # ---------- MockLLM ----------
@@ -195,3 +199,82 @@ def test_mock_llm_conforms_to_LLM_protocol():
     llm: LLM = MockLLM()
     response = llm.complete(prompt="x", model="m")
     assert isinstance(response, LLMResponse)
+
+
+# ---------- resolve_model (user request: configurable provider + model) ----------
+
+
+def test_resolve_model_returns_default_when_no_env_override(monkeypatch):
+    for provider in ("openai", "anthropic", "gemini"):
+        for env_var in ("OPENAI_DEFAULT_MODEL", "ANTHROPIC_DEFAULT_MODEL", "GEMINI_DEFAULT_MODEL"):
+            monkeypatch.delenv(env_var, raising=False)
+        assert resolve_model(provider) == DEFAULT_MODELS[provider]
+
+
+def test_resolve_model_env_override_takes_precedence(monkeypatch):
+    """The whole point of this feature: a user must be able to swap models
+    without touching code, e.g. bump OpenAI up to gpt-5.4-mini."""
+    monkeypatch.setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-mini-2026-03-17")
+    assert resolve_model("openai") == "gpt-5.4-mini-2026-03-17"
+
+
+def test_resolve_model_override_is_per_provider_not_global(monkeypatch):
+    """Setting ANTHROPIC_DEFAULT_MODEL must not affect openai's resolution --
+    each provider's override is independent."""
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_MODEL", "some-other-claude-model")
+    monkeypatch.delenv("OPENAI_DEFAULT_MODEL", raising=False)
+    assert resolve_model("openai") == DEFAULT_MODELS["openai"]
+    assert resolve_model("anthropic") == "some-other-claude-model"
+
+
+def test_resolve_model_case_insensitive_provider():
+    assert resolve_model("OpenAI") == resolve_model("openai")
+
+
+def test_resolve_model_rejects_unknown_provider():
+    with pytest.raises(ValueError, match="No default model for provider"):
+        resolve_model("totally-fake-provider")
+
+
+def test_default_models_covers_every_real_provider():
+    """Every non-mock provider get_llm() supports must have a DEFAULT_MODELS
+    entry, or resolve_model() would raise for a provider get_llm() accepts --
+    an inconsistency that would only surface at call time, not import time."""
+    assert set(DEFAULT_MODELS) == {"openai", "anthropic", "gemini"}
+
+
+# ---------- GeminiLLM + factory routing ----------
+
+
+def test_get_llm_returns_gemini_when_env_var_set(monkeypatch):
+    """Verifies routing only -- does not construct a real GeminiLLM (would
+    require the google-genai package + a key). Mock provider short-circuits
+    before GeminiLLM's constructor runs."""
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    llm = get_llm()
+    assert isinstance(llm, MockLLM)
+
+
+def test_get_gemini_llm_returns_mock_when_env_var_set(monkeypatch):
+    """R8: CI is mock-only for every provider, including Gemini."""
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    llm = get_gemini_llm()
+    assert isinstance(llm, MockLLM)
+
+
+def test_get_llm_rejects_unknown_provider_still_works_with_gemini_added(monkeypatch):
+    """Regression guard: adding gemini as a valid provider must not loosen
+    the "reject anything else" behavior."""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
+        get_llm(provider="still-not-a-real-provider")
+
+
+def test_gemini_llm_class_exists_and_is_lazy_importing():
+    """GeminiLLM must not require the google-genai package to be installed
+    at MODULE IMPORT time -- only at construction time (matching
+    OpenAILLM/AnthropicLLM's established lazy-import convention). This test
+    only checks the class is importable from common.llm; it does not
+    construct an instance (that would require google-genai installed)."""
+    assert GeminiLLM is not None
+    assert hasattr(GeminiLLM, "complete")

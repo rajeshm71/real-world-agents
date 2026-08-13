@@ -9,6 +9,14 @@ platform.openai.com/docs/pricing on 2026-08-11. Anthropic (claude-sonnet-5)
 verified against platform.claude.com/docs/en/about-claude/models/overview
 (base rate) and .../build-with-claude/prompt-caching (cache multipliers:
 write 5-min TTL = 1.25x base input, read = 0.1x base input) on 2026-08-12.
+Gemini (gemini-2.5-flash, gemini-2.5-flash-lite) verified via web search
+2026-08-13 -- ai.google.dev pricing pages. NOTE: unlike OpenAI, Google does
+NOT expose dated-snapshot model ID strings (no `-2026-03-17` suffix
+equivalent) -- `gemini-2.5-flash` is the bare, currently-current ID. This
+is a documented exception to R7's "pinned dated snapshot" preference, not
+an oversight: Google's naming scheme doesn't offer a dated alternative.
+One source flagged the 2.5 family for an Oct 16 2026 retirement window --
+re-verify before real use if this file is more than a few weeks old.
 Re-verify before relying on these for a real spend decision if this file is
 more than a few weeks old, per SPEC.md R7 (model version pinning).
 
@@ -45,6 +53,15 @@ CHAT_PRICING: dict[str, ModelPricing] = {
         cached_input_per_1m=0.20,
         output_per_1m=10.00,
         cache_creation_per_1m=2.50,
+    ),
+    # Gemini: no cache-read/cache-write tiers priced here (Gemini's implicit
+    # caching has no per-call user-facing rate to bill against at this
+    # project's usage tier -- unlike Anthropic's explicit cache_control).
+    "gemini-2.5-flash": ModelPricing(
+        input_per_1m=0.30, cached_input_per_1m=None, output_per_1m=2.50
+    ),
+    "gemini-2.5-flash-lite": ModelPricing(
+        input_per_1m=0.10, cached_input_per_1m=None, output_per_1m=0.40
     ),
 }
 

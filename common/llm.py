@@ -2,9 +2,18 @@
 
 Contract fixed by SPEC.md §10: `LLM.complete()` returns an `LLMResponse` with
 text, token counts, cached-token count (for prompt-caching cost tracking), and
-latency. Three concrete implementations ship here: `OpenAILLM`, `AnthropicLLM`,
-and `MockLLM` (deterministic, used in CI per SPEC.md R8 -- CI never touches a
-real API key, for any provider).
+latency. Four concrete implementations ship here: `OpenAILLM`, `AnthropicLLM`,
+`GeminiLLM`, and `MockLLM` (deterministic, used in CI per SPEC.md R8 -- CI
+never touches a real API key, for any provider).
+
+Provider + model are both user-configurable via env vars (never hardcoded to
+one provider) -- this project is OSS and every user brings their own key(s).
+`LLM_PROVIDER` picks openai (default) / anthropic / gemini / mock.
+`OPENAI_DEFAULT_MODEL` / `ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`
+override the per-provider default model string -- see `DEFAULT_MODELS` below.
+None of this requires an API key to develop or run tests against; a key is
+only needed for an actual non-mock call, which is the end user's job, not a
+development-time requirement.
 
 Ported from sibling rag-recipes' recipes/llm.py. The main deviation is the env
 var name: `LLM_PROVIDER` (this project) instead of `RAG_RECIPES_LLM` -- cleaner
@@ -24,6 +33,44 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
+
+# Per-provider default model, overridable by env var. Values verified
+# 2026-08-11 (OpenAI, ported from sibling rag-recipes) and 2026-08-13
+# (Anthropic, Gemini) -- see common/pricing.py's module docstring for the
+# full verification notes, including the Gemini-has-no-dated-snapshot
+# caveat. Re-verify per SPEC.md R7 before relying on these for a real run.
+DEFAULT_MODELS: dict[str, str] = {
+    "openai": "gpt-4.1-mini-2025-04-14",
+    "anthropic": "claude-sonnet-5",
+    "gemini": "gemini-2.5-flash",
+}
+
+_MODEL_ENV_VARS: dict[str, str] = {
+    "openai": "OPENAI_DEFAULT_MODEL",
+    "anthropic": "ANTHROPIC_DEFAULT_MODEL",
+    "gemini": "GEMINI_DEFAULT_MODEL",
+}
+
+
+def resolve_model(provider: str) -> str:
+    """Return the model string to use for `provider`: the env-var override
+    if the user set one, else DEFAULT_MODELS[provider]. This is the single
+    source of truth every agent should call instead of hardcoding a model
+    string, so `OPENAI_DEFAULT_MODEL=gpt-5.4-mini-2026-03-17` (or any other
+    override) takes effect everywhere without code changes.
+    """
+    provider = provider.lower()
+    env_var = _MODEL_ENV_VARS.get(provider)
+    if env_var:
+        override = os.environ.get(env_var)
+        if override:
+            return override
+    if provider not in DEFAULT_MODELS:
+        raise ValueError(
+            f"No default model for provider {provider!r}. "
+            f"Expected one of {sorted(DEFAULT_MODELS)}."
+        )
+    return DEFAULT_MODELS[provider]
 
 
 @dataclass
@@ -166,6 +213,58 @@ class AnthropicLLM:
         )
 
 
+class GeminiLLM:
+    """Production adapter. Requires GEMINI_API_KEY (or GOOGLE_API_KEY, which
+    the google-genai SDK also accepts). Uses Google's `google-genai` SDK
+    (the current recommended client per ai.google.dev, GA since May 2025).
+
+    NOTE: token-usage attribute names (`usage_metadata.prompt_token_count`
+    etc.) are written from documented SDK conventions, not independently
+    exercised against a real API call in this sandbox (no GEMINI_API_KEY
+    available). Verify before relying on this for a real run -- same
+    category of risk already tracked in tasks/todo.md for the receipt
+    extractor's Gemini path.
+    """
+
+    def __init__(self, api_key: str | None = None) -> None:
+        # Lazy import, same convention as OpenAILLM/AnthropicLLM.
+        from google import genai
+
+        self._client = genai.Client(
+            api_key=api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        )
+
+    def complete(
+        self,
+        prompt: str,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+        cacheable_prefix: str | None = None,  # no-op: Gemini's caching has no per-call control at this tier
+    ) -> LLMResponse:
+        start = time.perf_counter()
+        full_prompt = f"{cacheable_prefix}\n\n{prompt}" if cacheable_prefix else prompt
+        response = self._client.models.generate_content(
+            model=model,
+            contents=full_prompt,
+            config={"temperature": temperature, "max_output_tokens": max_tokens},
+        )
+        latency_ms = (time.perf_counter() - start) * 1000
+
+        usage = getattr(response, "usage_metadata", None)
+        input_tokens = getattr(usage, "prompt_token_count", 0) or 0
+        output_tokens = getattr(usage, "candidates_token_count", 0) or 0
+        cached = getattr(usage, "cached_content_token_count", 0) or 0
+
+        return LLMResponse(
+            text=response.text or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_input_tokens=cached,
+            latency_ms=latency_ms,
+        )
+
+
 @dataclass
 class _RecordedCall:
     prompt: str
@@ -249,30 +348,40 @@ class MockLLM:
 
 def get_llm(provider: str | None = None) -> LLM:
     """Factory. Respects the LLM_PROVIDER env var if `provider` not passed.
-    Values: "openai" (default), "anthropic", "mock". CI always sets
-    LLM_PROVIDER=mock per R8.
+    Values: "openai" (default), "anthropic", "gemini", "mock". CI always
+    sets LLM_PROVIDER=mock per R8.
     """
     provider = (provider or os.environ.get("LLM_PROVIDER", "openai")).lower()
     if provider == "openai":
         return OpenAILLM()
     if provider == "anthropic":
         return AnthropicLLM()
+    if provider == "gemini":
+        return GeminiLLM()
     if provider == "mock":
         return MockLLM()
     raise ValueError(
-        f"Unknown LLM_PROVIDER: {provider!r}. Expected 'openai', 'anthropic', or 'mock'."
+        f"Unknown LLM_PROVIDER: {provider!r}. Expected 'openai', 'anthropic', 'gemini', or 'mock'."
     )
 
 
-# Convenience alias for agents that specifically need Anthropic (e.g. contract
-# reviewer with long-context, receipt extractor with vision). Under mock, both
-# get_llm() and get_anthropic_llm() return the same MockLLM class (R8 applies
-# to every provider, not just OpenAI).
+# Convenience aliases for agents that specifically need one provider (e.g.
+# the receipt extractor's vision step). Under mock, every one of these
+# returns the same MockLLM class (R8 applies to every provider, not just
+# OpenAI) -- `provider` param lets an agent force a non-default provider
+# while still honoring LLM_PROVIDER=mock in CI.
 def get_anthropic_llm() -> LLM:
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider == "mock":
         return MockLLM()
     return AnthropicLLM()
+
+
+def get_gemini_llm() -> LLM:
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+    if provider == "mock":
+        return MockLLM()
+    return GeminiLLM()
 
 
 # Helper used by MockLLM in some downstream tests -- kept public so downstream

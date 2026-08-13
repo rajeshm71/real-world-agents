@@ -104,7 +104,7 @@ Every choice below is deliberate. If a coding tool wants to swap a dep, it must 
 
 **Dependency policy:**
 
-- **Root `pyproject.toml`** declares `common/`'s runtime deps (targeting ≤3: `openai`, `anthropic`, `pydantic`) and MUST include `[tool.uv.workspace] members = ["common", "agents/*"]` so `uv sync` at the root discovers every agent as a workspace member. Dev deps (`pytest`, `ruff`, `uv` itself) are not counted against the runtime budget.
+- **Root `pyproject.toml`** declares `common/`'s runtime deps (targeting ≤4: `openai`, `anthropic`, `google-genai`, `pydantic` — three provider SDKs since no provider is hardcoded, see R6) and MUST include `[tool.uv.workspace] members = ["common", "agents/*"]` so `uv sync` at the root discovers every agent as a workspace member. Dev deps (`pytest`, `ruff`, `uv` itself) are not counted against the runtime budget.
 - **Each agent's `pyproject.toml`** declares its own runtime deps. Per-agent budget ≤10.
 - **Framework-heavy agents** (LangGraph, CrewAI, DSPy, etc.) get their own deps in their own folder. Nothing leaks into other agents.
 
@@ -638,7 +638,7 @@ Ordered by priority. R1 is THE primary bar — everything else is subordinate to
 - **R3. Technique variety (with soft framework ceiling).** Every agent must demonstrate a distinctly different TECHNIQUE (structured extraction, ReAct, tool use with retry, RAG with citations, multi-agent collaboration, meta-optimization, from-scratch loop, etc.). Framework is an implementation choice with a soft ceiling of ≤3 agents per framework. Each subsequent agent using an already-used framework must demonstrate a technique the earlier ones don't (see §7's called-out cases for the intended pattern). Enforced during maintainer review of new-agent PRs.
 - **R4. Per-agent README template enforcement.** All 11 sections from §8.1, in order, on every shipped agent's README. Enforced by `scripts/lint_agents.py` in CI. Sections 1-8 required; 9-11 optional badges.
 - **R5. Real error handling.** The three obvious error cases for each agent's inputs are handled explicitly (rate limits, malformed input, tool/API failure) — not happy-path only. This is what makes the agent "deployable" per §0.
-- **R6. Dependency budget.** `common/` runtime deps ≤3 (openai, anthropic, pydantic). Dev deps (pytest, ruff, uv itself) are not counted. Per-agent runtime budget ≤10. Never add LangChain-style monolithic frameworks to `common/` — an individual agent may use one, that's fine.
+- **R6. Dependency budget.** `common/` runtime deps ≤4 (openai, anthropic, google-genai, pydantic — bumped from the original ≤3 to add Gemini as a first-class provider per explicit user request; the project must not hardcode a single provider). Dev deps (pytest, ruff, uv itself) are not counted. Per-agent runtime budget ≤10. Never add LangChain-style monolithic frameworks to `common/` — an individual agent may use one, that's fine.
 - **R7. Model version pinning.** Every LLM call uses a pinned dated snapshot. Every agent's README lists exact model IDs and their verification date.
 - **R8. CI is mock-only.** No real API keys in CI secrets. Every test suite runs under `LLM_PROVIDER=mock`.
 - **R9. Prose style + git hygiene.** No em dashes or en dashes between words; hyphens only for real technical terms. Conventional commits, no AI co-author trailers, squash merge only. Same as rag-recipes' inherited style.

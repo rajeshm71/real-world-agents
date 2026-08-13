@@ -1,13 +1,20 @@
 [project]
 name = "receipt-extractor"
 version = "0.1.0"
-description = "Receipt/invoice image -> structured JSON. Demonstrates structured extraction with Instructor + Claude vision. Agent #01 of real-world-agents."
+description = "Receipt/invoice image -> structured JSON. Demonstrates structured extraction with Instructor + vision, across OpenAI/Anthropic/Gemini. Agent #01 of real-world-agents."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-    "real-world-agents",  # for common.pricing.cost_usd
+    "real-world-agents",  # for common.llm.resolve_model + common.pricing.cost_usd
     "instructor>=1.7",
+    # Multi-provider support (user request): all three vision-capable
+    # providers Instructor's from_provider() can target. openai/anthropic/
+    # google-genai are also root workspace deps (transitively resolved via
+    # real-world-agents above); listed explicitly here too so a reader of
+    # this file alone sees the full picture of what this agent actually uses.
+    "openai>=1.50",
     "anthropic>=0.121",
+    "google-genai>=1.0",
     "pydantic>=2.5",
     "gradio>=4.44",
     # F1.2 review S2: pypdf + pillow removed -- both were declared but never

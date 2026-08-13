@@ -212,3 +212,27 @@ def test_claude_cache_rates_follow_documented_multipliers():
     claude = CHAT_PRICING["claude-sonnet-5"]
     assert claude.cached_input_per_1m == pytest.approx(claude.input_per_1m * 0.10)
     assert claude.cache_creation_per_1m == pytest.approx(claude.input_per_1m * 1.25)
+
+
+# ---------- Gemini (multi-provider support, user request) ----------
+
+
+def test_gemini_flash_pricing_matches_verified_rate():
+    # Verified 2026-08-13: $0.30/1M input, $2.50/1M output.
+    cost = cost_usd("gemini-2.5-flash", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost == pytest.approx(0.30 + 2.50)
+
+
+def test_gemini_flash_lite_pricing_matches_verified_rate():
+    # Verified 2026-08-13: $0.10/1M input, $0.40/1M output.
+    cost = cost_usd("gemini-2.5-flash-lite", input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost == pytest.approx(0.10 + 0.40)
+
+
+def test_gemini_has_no_cache_tiers_priced():
+    """Gemini entries deliberately have cached_input_per_1m=None (no
+    per-call user-facing cache-read rate at this project's usage tier,
+    unlike Anthropic's explicit cache_control). Passing cached_input_tokens
+    against a Gemini model must raise, same as any other no-cache-tier model."""
+    with pytest.raises(ValueError, match="no cached-input rate"):
+        cost_usd("gemini-2.5-flash", input_tokens=1000, cached_input_tokens=500)
