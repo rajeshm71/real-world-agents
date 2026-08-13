@@ -44,10 +44,22 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .schemas import (  # F1.2 review S3: LineItem now imported at top instead of inside _mock_extraction
-    ExtractedReceipt,
-    LineItem,
-)
+# F1.3 review fix S1: dual-mode import. `.schemas` (relative) resolves when
+# this module is loaded AS a submodule of the 01_receipt_extractor package
+# (how tests/test_smoke.py imports it, via importlib since the dir name
+# starts with a digit). The bare `schemas` (absolute) resolves when this
+# file is run directly via `python -m agent` from inside the agent's own
+# directory (the documented CLI invocation in README.md) -- in that mode
+# Python has no parent-package context at all, so relative imports raise
+# ImportError. Both invocation styles must work; this try/except is the
+# standard pattern for a script that's also importable as a package member.
+try:
+    from .schemas import (  # F1.2 review S3: LineItem now imported at top instead of inside _mock_extraction
+        ExtractedReceipt,
+        LineItem,
+    )
+except ImportError:
+    from schemas import ExtractedReceipt, LineItem
 
 # --- Model + prompt ---
 
@@ -303,7 +315,13 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.ui:
-        from .ui import build_ui
+        # F1.3 review fix S1: same dual-mode import pattern as the schemas
+        # import above -- `python -m agent --ui` from inside the agent's
+        # own directory has no parent-package context.
+        try:
+            from .ui import build_ui
+        except ImportError:
+            from ui import build_ui
 
         build_ui().launch()
         return 0

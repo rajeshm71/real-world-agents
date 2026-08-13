@@ -18,13 +18,29 @@ from pathlib import Path
 
 import gradio as gr
 
-from .agent import (
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL,
-    ReceiptExtractionError,
-    _guess_media_type,
-    extract_receipt,
-)
+# F1.3 review fix S1: dual-mode import, same rationale as agent.py's
+# schemas import -- when agent.py's `--ui` branch does `from .ui import
+# build_ui` (relative, when agent is loaded as a top-level module by
+# `python -m agent`), this module in turn needs an ABSOLUTE import of
+# `agent` since it's a sibling top-level module in that same invocation,
+# not a package member. The relative form still resolves when ui.py is
+# imported as a proper package submodule (e.g. by a future test).
+try:
+    from .agent import (
+        DEFAULT_MAX_TOKENS,
+        DEFAULT_MODEL,
+        ReceiptExtractionError,
+        _guess_media_type,
+        extract_receipt,
+    )
+except ImportError:
+    from agent import (
+        DEFAULT_MAX_TOKENS,
+        DEFAULT_MODEL,
+        ReceiptExtractionError,
+        _guess_media_type,
+        extract_receipt,
+    )
 
 # F1.2 review S3: `logging` import + unused `logger` removed. If we later
 # need per-request logging in the UI, add `import logging` back at that

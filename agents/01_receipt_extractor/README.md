@@ -18,30 +18,31 @@ Input: a receipt or invoice image (JPEG/PNG/WebP/GIF). Output: a validated `Extr
 
 ## How to run locally
 
-Three commands from a fresh clone:
+Four commands from a fresh clone (review fix S1: `python -m agent` must run from inside the agent's own directory — `agent` is a submodule of the digit-prefixed `01_receipt_extractor` package, not importable as a top-level module from the repo root):
 
 ```bash
 git clone https://github.com/rajeshm71/real-world-agents.git
 cd real-world-agents
 cp .env.example .env    # then edit .env to add your ANTHROPIC_API_KEY
+cd agents/01_receipt_extractor
 ```
 
 CLI:
 
 ```bash
-uv run --package receipt-extractor python -m agent path/to/receipt.jpg
+uv run python -m agent path/to/receipt.jpg
 ```
 
 Gradio UI:
 
 ```bash
-uv run --package receipt-extractor python -m agent --ui
+uv run python -m agent --ui
 ```
 
 Mock mode (no API key needed, canned response for testing the pipeline end-to-end):
 
 ```bash
-LLM_PROVIDER=mock uv run --package receipt-extractor python -m agent path/to/receipt.jpg
+LLM_PROVIDER=mock uv run python -m agent path/to/receipt.jpg
 ```
 
 ## Code walkthrough
