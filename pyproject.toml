@@ -54,4 +54,4 @@ ignore = ["BLE001"]
 "agents/*/tests/*.py" = ["N999"]
 
 [tool.pytest.ini_options]
-testpaths = ["common/tests", "agents"]
+testpaths = ["common/tests", "agents", "tests"]
