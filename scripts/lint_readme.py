@@ -63,11 +63,18 @@ def check_readme(readme_path: Path, agents_dir: Path) -> list[str]:
     content = readme_path.read_text(encoding="utf-8")
     referenced = find_referenced_agent_dirs(content)
 
-    actual = {
-        d.name
-        for d in agents_dir.iterdir()
-        if agents_dir.exists() and d.is_dir() and (d / "README.md").exists()
-    }
+    # F1.6 review fix S1: the `if agents_dir.exists()` used to sit INSIDE the
+    # comprehension, filtering items already yielded by `.iterdir()` -- but
+    # `.iterdir()` itself raises FileNotFoundError before that filter ever
+    # runs if agents_dir doesn't exist, so the guard was dead code that could
+    # never prevent the crash it looked like it was guarding against. Moved
+    # to an early check, matching find_actual_agent_dirs()'s already-correct
+    # pattern above.
+    actual: set[str] = set()
+    if agents_dir.exists():
+        actual = {
+            d.name for d in agents_dir.iterdir() if d.is_dir() and (d / "README.md").exists()
+        }
 
     missing_from_readme = sorted(actual - referenced)
     stale_in_readme = sorted(referenced - actual)

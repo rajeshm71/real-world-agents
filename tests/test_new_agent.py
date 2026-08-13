@@ -129,3 +129,24 @@ def test_scaffold_readme_has_all_required_section_headers(tmp_path):
         "## Where this fails",
     ]:
         assert heading in content, f"scaffolded README missing {heading!r}"
+
+
+def test_scaffold_agent_py_is_syntactically_valid_python(tmp_path):
+    """F1.6 review fix S2 regression guard: the scaffolded agent.py used to
+    contain `def run(...) -> Result:` -- bare Ellipsis as a parameter list,
+    which is not valid Python syntax. A contributor running the scaffold and
+    immediately trying `python -m agent` (before editing anything) hit a
+    SyntaxError the tool itself introduced. Parse every generated .py file
+    with ast.parse() to guarantee this can't regress silently."""
+    import ast
+
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    result = new_agent.scaffold("syntax check", agents_dir=agents_dir)
+
+    for py_file in result.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        try:
+            ast.parse(source)
+        except SyntaxError as exc:
+            pytest.fail(f"{py_file.relative_to(result)} is not valid Python: {exc}")

@@ -159,6 +159,39 @@ def test_agent_dir_without_readme_is_not_counted_as_shipped(tmp_path):
     assert problems == []
 
 
+def test_check_readme_does_not_crash_when_agents_dir_missing(tmp_path):
+    """F1.6 review fix S1 regression guard: check_readme() must not raise
+    FileNotFoundError when agents_dir doesn't exist. Previously the
+    `if agents_dir.exists()` guard was placed INSIDE the set comprehension
+    (filtering items after `.iterdir()` already ran), so it could never
+    actually prevent `.iterdir()` from raising on a nonexistent directory --
+    dead code that looked like a guard but wasn't one. A repo checked out
+    without ever running scripts/new_agent.py (agents/ genuinely absent)
+    must still get a clean, non-crashing report."""
+    agents_root = tmp_path / "agents"  # deliberately never created
+
+    readme = tmp_path / "README.md"
+    readme.write_text("[Ghost](agents/99_ghost/)", encoding="utf-8")
+
+    # Must not raise. Every referenced link should be reported as stale
+    # since nothing in agents_dir exists at all.
+    problems = lint_readme.check_readme(readme, agents_root)
+    assert len(problems) == 1
+    assert "99_ghost" in problems[0]
+    assert "doesn't exist" in problems[0]
+
+
+def test_check_readme_ok_when_both_readme_and_agents_dir_have_nothing(tmp_path):
+    """Same missing-agents_dir scenario, but with a README that references
+    no agents at all -- must report zero problems, not crash."""
+    agents_root = tmp_path / "agents"  # deliberately never created
+
+    readme = tmp_path / "README.md"
+    readme.write_text("Nothing about agents here.", encoding="utf-8")
+
+    assert lint_readme.check_readme(readme, agents_root) == []
+
+
 # ---------- Real-repo integration ----------
 
 
