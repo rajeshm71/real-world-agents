@@ -98,3 +98,21 @@ Specific examples from spot-checks, not generic warnings:
 - **PDF input** (currently not supported despite SPEC promising it — tracked in `tasks/todo.md` as F1.5 prerequisite) — silently gets base64-encoded and rejected with a 400, which surfaces as "Couldn't read this image." Real fix: use each provider's native document/file content block, planned for a follow-up commit before the real-provider run.
 - **Non-receipt images** (a photo of a landscape, a screenshot of a webpage) — the model returns a `ValidationError` because there's no `total` to extract; the UI shows the raw model output in the warning banner ("this doesn't appear to be a receipt") rather than silently returning zeros.
 - **Gemini path is unverified** — the image content-block format for Gemini (via Instructor's provider-agnostic message handling) has not been exercised against a real Gemini API call in this sandbox (no `GEMINI_API_KEY` available during development). If it fails, OpenAI or Anthropic are the verified fallback providers — just change `LLM_PROVIDER`.
+- **Tax extraction is the weakest field (46% accuracy, see "Accuracy" below)** — many receipts print tax as a percentage line or omit it from a clearly labeled "tax" row entirely (folded into a service charge, or just implied by the gap between subtotal and total). The model sometimes computes what it thinks tax should be rather than reading a printed figure, which agrees with the receipt's total but not with the ground truth's tax breakdown. Real, measured weakness — not a hypothetical one.
+
+## Accuracy
+
+Measured 2026-08-14 against 20 real receipts from the [CORD dataset](https://github.com/clovaai/cord) (NAVER CLOVA AI Research, CC BY 4.0) — see [`eval/README.md`](eval/README.md) for the full sourcing, licensing, and scope-limit details. Run with `LLM_PROVIDER=openai` (`gpt-4.1-mini-2025-04-14`, the default).
+
+| Field | Accuracy | Cases scored |
+|---|---|---|
+| `total` | 90% | 20 |
+| `line_items` (count only) | 85% | 20 |
+| `subtotal` | 72% | 18 |
+| `tax_total` | 46% | 13 |
+
+**Not scored in this batch** (see `eval/README.md` for why): `vendor_name` — CORD's public images have store names/logos blurred by the dataset's own curators, so this can't be tested against these images at all. `currency`, `invoice_date`, `invoice_number`, `due_date`, `payment_method` — not independently verified per-image for this batch.
+
+**Read this honestly**: `total` (the field this tool exists to get right) is solid at 90%. `tax_total` at 46% is a real, measured weakness, not a guess — see "Where this fails" above. All 20 cases are restaurant receipts in a single currency family (mostly Indonesian Rupiah); accuracy on formal multi-line invoices or other currencies is untested.
+
+Reproduce: `LLM_PROVIDER=openai uv run python eval/run_eval.py` from inside this directory (~$0.10-0.20, makes 20 real API calls). Full instructions in [`eval/README.md`](eval/README.md).

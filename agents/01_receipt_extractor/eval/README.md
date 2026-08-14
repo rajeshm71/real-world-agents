@@ -4,10 +4,10 @@ This directory is the accuracy eval harness for agent #01, per SPEC.md F1.5:
 20 real receipts, hand-labeled ground truth, per-field accuracy measured and
 printed in the agent's README once run.
 
-**Status: 20 real cases loaded, not yet run against a real API.** See
-"Data source" below. The agent's README does not claim an accuracy number
-yet, because none has been measured — running the eval (see "Running the
-eval" below) requires a real API key and makes real, billed calls.
+**Status: run.** 20 cases scored against `LLM_PROVIDER=openai`
+(`gpt-4.1-mini-2025-04-14`) on 2026-08-14. Results in `results.md` and
+copied into the agent's [main README](../README.md#accuracy). See "Data
+source" below for what these numbers do and don't cover.
 
 ## Data source
 
