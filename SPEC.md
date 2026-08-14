@@ -400,11 +400,14 @@ real-world-agents/
 │   └── new_agent.py                       # scaffolds a new agent's dir tree
 └── docs/
     ├── adding_an_agent.md
-    ├── deploying_an_agent.md              # HF Spaces recipe
-    └── launch/
-        ├── twitter_post.md                # F1 launch draft
-        └── linkedin_post.md
+    └── deploying_an_agent.md              # HF Spaces recipe
 ```
+
+Launch drafts (twitter_post.md, linkedin_post.md) are NOT in this tree.
+Decision reversed post-F1.7 (see §19 note below): personal marketing copy
+doesn't belong in a public code repository. They live in `tasks/launch/`
+instead -- local-only, gitignored, same treatment as `tasks/todo.md` and
+`tasks/lessons.md`.
 
 No `platform/`. No `platform/registry.py`, `platform/app.py`, `platform/trace/`. Removed deliberately.
 
@@ -610,7 +613,7 @@ Contributor Covenant 2.1, ships as `CODE_OF_CONDUCT.md`. Enforcement contact: `r
 | F1.4 | Optional: HF Space deployed and linked | Public URL reachable, demo works on 5 sample receipts |
 | F1.5 | **Required for F1 (flagship agent):** eval set with 20 real anonymized receipts + accuracy table in README | Per-field accuracy computed and printed. Required for F1 because the launch story is "deployable OSS receipt extractor" — that claim needs measured proof for the flagship. For F2+ agents, this bar drops to optional per §16 Fn acceptance. |
 | F1.6 | Main README + landing page + CI + LICENSE + CONTRIBUTING.md + CODE_OF_CONDUCT.md + .env.example + .github/ | Every §14 section present; every link resolves; CI green on a clean push |
-| F1.7 | Launch drafts in `docs/launch/` | Both `twitter_post.md` and `linkedin_post.md` ready-to-post (no `[FILL IN]` placeholders unless truly awaiting real data) |
+| F1.7 | Launch drafts in `tasks/launch/` (local-only, gitignored — see §19 note) | Both `twitter_post.md` and `linkedin_post.md` ready-to-post (no `[FILL IN]` placeholders unless truly awaiting real data) |
 
 **F1 is done when F1.1-F1.3 + F1.5 + F1.6 + F1.7 are complete. Only F1.4 (HF Space live demo) is optional.**
 
@@ -659,7 +662,7 @@ The project is F1-done and ready to launch publicly when:
 - Main README has §14 sections, shipped grid shows F1, roadmap grid shows planned agents from §7
 - CI is green on a clean push
 - `LICENSE` (MIT), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.env.example`, `.github/` templates all present
-- Launch drafts in `docs/launch/` ready-to-post
+- Launch drafts in `tasks/launch/` ready-to-post (local-only, not part of the public repo — see §19)
 - Reader-test: someone new to Instructor reads the F1 agent's README + code and can explain what "structured extraction" is and when they'd use it
 
 Optional but recommended for F1 launch impact:
@@ -670,6 +673,16 @@ Optional but recommended for F1 launch impact:
 ---
 
 ## 19. Launch plan (post-F1)
+
+**Post-F1.7 correction:** launch drafts (`twitter_post.md`, `linkedin_post.md`)
+were originally committed to the public repo at `docs/launch/`, per this
+section's original wording. Reversed after a repo audit: personal
+marketing/social-media copy has no functional value to a contributor or
+user of the code, isn't standard practice for OSS repos, and goes stale
+the moment it's actually posted (edited copy sits in the tree as an
+outdated public artifact). Drafts now live in `tasks/launch/` —
+local-only, gitignored, same treatment as `tasks/todo.md` and
+`tasks/lessons.md`. §9's repo tree and F1.7's row in §18 both reflect this.
 
 Educational framing, not "impressive demo" framing:
 
