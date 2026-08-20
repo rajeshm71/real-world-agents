@@ -12,7 +12,6 @@ Space, as the container's entry point.
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -55,7 +54,12 @@ _EXAMPLES_DIR = Path(__file__).parent / "examples"
 
 def _sample_receipt_paths() -> list[str]:
     """List example receipts (added under examples/). Returns [] if the
-    directory is empty — the UI just hides the sample buttons in that case."""
+    directory is empty — the UI just hides the sample buttons in that case.
+
+    Image types only -- deliberately excludes .pdf even though agent.py
+    supports PDF input for openai/anthropic, because the `image` component
+    below (gr.Image) only accepts image files. A PDF sample would need its
+    own upload widget, not just adding ".pdf" to this suffix set."""
     if not _EXAMPLES_DIR.exists():
         return []
     return sorted(
@@ -96,7 +100,10 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     # Cost estimate (mock mode gives $0 — real mode estimates from the SPEC's
     # §13 per-extraction numbers). Under mock we don't have real token counts;
     # the estimate is honest about being an estimate.
-    provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+    # Must match extract_receipt()'s own resolution (resolve_provider(),
+    # default "openai") -- a hardcoded default here previously drifted from
+    # that and made the cost line show the wrong model.
+    provider = resolve_provider()
     if provider == "mock":
         cost_line = f"Extracted in {elapsed_ms:.0f}ms (mock mode — no real API call)"
     else:

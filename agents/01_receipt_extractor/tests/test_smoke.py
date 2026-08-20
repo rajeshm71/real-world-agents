@@ -293,6 +293,14 @@ def test_build_content_pdf_shape_identical_for_openai_and_anthropic():
     assert isinstance(anthropic_content[1], PDF)
 
 
+def test_build_content_rejects_pdf_for_gemini_directly():
+    """_build_content() enforces the gemini+PDF rejection itself, not just
+    extract_receipt() -- calling it directly with provider="gemini" must
+    still raise rather than silently returning a PDF content block."""
+    with pytest.raises(ReceiptExtractionError, match="PDF input is not yet supported"):
+        _build_content("gemini", "application/pdf", "ZmFrZQ==", "extract this")
+
+
 def test_extract_receipt_pdf_mock_mode_round_trips(monkeypatch):
     """Mock mode bypasses provider/content branching entirely, so this only
     proves the media_type plumbing doesn't break the existing mock path --

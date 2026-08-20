@@ -174,10 +174,9 @@ def extract_receipt(
         return _mock_extraction(image_bytes)
 
     if media_type == "application/pdf" and resolved_provider == "gemini":
-        raise ReceiptExtractionError(
-            "PDF input is not yet supported with LLM_PROVIDER=gemini. "
-            "Use 'openai' or 'anthropic' for PDF receipts, or convert to an image first."
-        )
+        # Also enforced inside _build_content(); checked here first to avoid
+        # resolving a model / building a client just to throw it away.
+        raise _pdf_unsupported_for_gemini_error()
 
     resolved_model = model or resolve_model(resolved_provider)
     client = _client if _client is not None else _get_real_client(resolved_provider, resolved_model)
@@ -202,6 +201,17 @@ def extract_receipt(
     return result
 
 
+def _pdf_unsupported_for_gemini_error() -> ReceiptExtractionError:
+    """Shared message for the gemini+PDF rejection, checked in two places
+    (extract_receipt() for an early exit, _build_content() as a defensive
+    guard against calling it directly) -- factored out so the two call
+    sites can't drift apart."""
+    return ReceiptExtractionError(
+        "PDF input is not yet supported with LLM_PROVIDER=gemini. "
+        "Use 'openai' or 'anthropic' for PDF receipts, or convert to an image first."
+    )
+
+
 def _build_content(provider: str, media_type: str, b64_data: str, prompt: str) -> list:
     """Build the provider-specific content list for one Instructor `.create()`
     call. Handles both images (dict content blocks, hand-built per provider)
@@ -216,15 +226,25 @@ def _build_content(provider: str, media_type: str, b64_data: str, prompt: str) -
     Gemini run; tracked in tasks/todo.md alongside the other real-key
     verification items (S6/S7 from the F1.2 review).
 
-    PDF support (openai + anthropic only; gemini raises before reaching this
-    function) uses `instructor.processing.multimodal.PDF`, verified to exist
-    with a `from_base64(data_uri)` classmethod against the actually-installed
+    PDF support (openai + anthropic only) uses
+    `instructor.processing.multimodal.PDF`, verified to exist with a
+    `from_base64(data_uri)` classmethod against the actually-installed
     library (instructor>=1.7, this file's pin) via `inspect.signature()` --
     NOT verified against a real end-to-end API response, since no API key was
     available in this sandbox. Treat the PDF path the same as the untested
     S6/S7 items until it's been run against a live call.
+
+    Raises:
+        ReceiptExtractionError: if `media_type` is "application/pdf" and
+            `provider` is "gemini". `extract_receipt()` also checks this
+            earlier (to avoid building a client/resolving a model just to
+            throw it away), but the guard lives here too so a direct call to
+            this function can't silently produce a PDF block for a provider
+            that doesn't support it.
     """
     if media_type == "application/pdf":
+        if provider == "gemini":
+            raise _pdf_unsupported_for_gemini_error()
         from instructor.processing.multimodal import PDF
 
         return [prompt, PDF.from_base64(f"data:application/pdf;base64,{b64_data}")]
