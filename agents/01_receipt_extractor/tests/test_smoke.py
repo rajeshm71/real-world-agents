@@ -193,7 +193,7 @@ def test_unknown_error_class_falls_back_gracefully():
 # ---------- Prompt file ----------
 
 
-# ---------- Provider resolution (multi-provider support, user request) ----------
+# ---------- Provider resolution (multi-provider support) ----------
 
 
 def test_resolve_provider_defaults_to_openai(monkeypatch):
@@ -265,7 +265,7 @@ def test_build_image_content_every_supported_provider_produces_two_blocks():
 # ---------- PDF content construction (openai + anthropic only) ----------
 # NOTE: these are structural tests only (isinstance / mock-mode), per the
 # module docstring on `_build_content` -- the PDF path has NOT been verified
-# against a real OpenAI or Anthropic API call in this sandbox.
+# against a real OpenAI or Anthropic API call.
 
 
 def test_guess_media_type_recognizes_pdf():

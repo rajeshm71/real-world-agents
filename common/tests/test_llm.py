@@ -201,7 +201,7 @@ def test_mock_llm_conforms_to_LLM_protocol():
     assert isinstance(response, LLMResponse)
 
 
-# ---------- resolve_model (user request: configurable provider + model) ----------
+# ---------- resolve_model (configurable provider + model) ----------
 
 
 def test_resolve_model_returns_default_when_no_env_override(monkeypatch):

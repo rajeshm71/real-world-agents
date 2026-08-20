@@ -214,7 +214,7 @@ def test_claude_cache_rates_follow_documented_multipliers():
     assert claude.cache_creation_per_1m == pytest.approx(claude.input_per_1m * 1.25)
 
 
-# ---------- Gemini (multi-provider support, user request) ----------
+# ---------- Gemini (multi-provider support) ----------
 
 
 def test_gemini_flash_pricing_matches_verified_rate():

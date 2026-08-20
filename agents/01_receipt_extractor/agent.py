@@ -36,7 +36,7 @@ one `.create()` call path works across all three real providers; only the
 image content-block format below differs per provider (OpenAI's `image_url`
 data-URI format and Anthropic's `image`+`source` format are both long-stable
 and verified against public docs; the Gemini path is NOT independently
-verified against a real API call in this sandbox).
+verified against a real API call).
 
 Accepts images (JPEG/PNG/WebP/GIF) for all three providers, plus PDF for
 openai/anthropic via Instructor's cross-provider `PDF` multimodal helper
@@ -221,19 +221,18 @@ def _build_content(provider: str, media_type: str, b64_data: str, prompt: str) -
 
     OpenAI and Anthropic image formats are verified against stable,
     long-documented public API shapes. The Gemini image branch is NOT
-    independently verified against a real API call in this sandbox (no
-    GEMINI_API_KEY available) -- it relies on Instructor's own stated
-    "provider-agnostic" design (accepting OpenAI-shaped content blocks and
-    normalizing them internally). Verify before relying on this for a real
-    Gemini run.
+    independently verified against a real API call (no GEMINI_API_KEY
+    available) -- it relies on Instructor's own stated "provider-agnostic"
+    design (accepting OpenAI-shaped content blocks and normalizing them
+    internally). Verify before relying on this for a real Gemini run.
 
     PDF support (openai + anthropic only) uses
     `instructor.processing.multimodal.PDF`, verified to exist with a
-    `from_base64(data_uri)` classmethod against the actually-installed
-    library (instructor>=1.7, this file's pin) via `inspect.signature()` --
-    NOT verified against a real end-to-end API response, since no API key was
-    available in this sandbox. Treat the PDF path the same as the untested
-    S6/S7 items until it's been run against a live call.
+    `from_base64(data_uri)` classmethod against the installed library
+    (instructor>=1.7, this file's pin) via `inspect.signature()` -- NOT
+    verified against a real end-to-end API response, since no API key was
+    available. Treat the PDF path as unverified the same way, until it's
+    been run against a live call.
 
     Raises:
         ReceiptExtractionError: if `media_type` is "application/pdf" and
