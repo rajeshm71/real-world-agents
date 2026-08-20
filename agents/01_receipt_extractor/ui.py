@@ -17,13 +17,13 @@ from pathlib import Path
 
 import gradio as gr
 
-# F1.3 review fix S1: dual-mode import, same rationale as agent.py's
-# schemas import -- when agent.py's `--ui` branch does `from .ui import
-# build_ui` (relative, when agent is loaded as a top-level module by
-# `python -m agent`), this module in turn needs an ABSOLUTE import of
-# `agent` since it's a sibling top-level module in that same invocation,
-# not a package member. The relative form still resolves when ui.py is
-# imported as a proper package submodule (e.g. by a future test).
+# Dual-mode import, same rationale as agent.py's schemas import -- when
+# agent.py's `--ui` branch does `from .ui import build_ui` (relative, when
+# agent is loaded as a top-level module by `python -m agent`), this module
+# in turn needs an ABSOLUTE import of `agent` since it's a sibling top-level
+# module in that same invocation, not a package member. The relative form
+# still resolves when ui.py is imported as a proper package submodule (e.g.
+# by a future test).
 try:
     from .agent import (
         DEFAULT_MAX_TOKENS,
@@ -44,10 +44,6 @@ except ImportError:
 # common.llm is the root workspace package (see agent.py's identical import
 # for the full rationale) -- never a relative import.
 from common.llm import resolve_model
-
-# F1.2 review S3: `logging` import + unused `logger` removed. If we later
-# need per-request logging in the UI, add `import logging` back at that
-# point.
 
 _EXAMPLES_DIR = Path(__file__).parent / "examples"
 
@@ -85,10 +81,8 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
         result = extract_receipt(image_bytes, media_type=media_type)
     except ReceiptExtractionError as exc:
         # R5 case 3: partial extraction. If we have raw model output, show it
-        # in the warning banner so the user isn't left with nothing.
-        # F1.2 review S3: emoji removed (violates CLAUDE.md "no emojis unless
-        # explicitly requested"). Using bold "**Extraction failed:**" instead
-        # -- still visually prominent in Gradio's Markdown component.
+        # in the warning banner so the user isn't left with nothing. Bold
+        # markdown text stays visually prominent without needing an emoji.
         warning = f"**Extraction failed:** {exc.message}"
         if exc.partial is not None:
             warning += f"\n\nRaw model output:\n\n```\n{exc.partial.raw_text}\n```"

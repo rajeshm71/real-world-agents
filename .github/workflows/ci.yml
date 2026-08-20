@@ -34,13 +34,11 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.0
       - run: uv python install 3.12
       - run: uv sync
-      # F1.6 review: SPEC §12 literally lists "common tests" and "per-agent
-      # smoke tests" as two separate numbered jobs. Deliberately collapsed
-      # into ONE GitHub Actions job here -- pyproject.toml's testpaths
-      # already lists all three directories (common/tests, agents, tests),
-      # so a single `pytest` invocation exercises the whole suite with
-      # identical pass/fail semantics to two separate jobs. At the current
-      # scale (1 agent, ~2s runtime) the split isn't worth the extra job
-      # overhead; revisit (split into test-common / test-agents) once
-      # per-agent failure attribution in the Actions log actually matters.
+      # Deliberately one job, not split into test-common / test-agents:
+      # pyproject.toml's testpaths already lists all three directories
+      # (common/tests, agents, tests), so a single `pytest` invocation
+      # exercises the whole suite with identical pass/fail semantics to
+      # separate jobs. At the current scale (1 agent, ~2s runtime) the split
+      # isn't worth the extra job overhead; revisit once per-agent failure
+      # attribution in the Actions log actually matters.
       - run: uv run pytest

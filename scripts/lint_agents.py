@@ -34,11 +34,11 @@ _AGENTS_DIR = _REPO_ROOT / "agents"
 _H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _H2_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
-# F1.3 review fix S2: fenced code blocks (```...```) can contain lines
-# starting with # (shell comments, e.g. "# then edit .env...") that the
-# H1/H2 regexes would otherwise misinterpret as markdown headers, producing
-# confusing "duplicate section" / "out of order" errors on a perfectly
-# valid README. Strip fenced blocks before header extraction. DOTALL so
+# Fenced code blocks (```...```) can contain lines starting with #
+# (shell comments, e.g. "# then edit .env...") that the H1/H2 regexes would
+# otherwise misinterpret as markdown headers, producing confusing "duplicate
+# section" / "out of order" errors on a perfectly valid README. Strip fenced
+# blocks before header extraction. DOTALL so
 # `.` matches newlines inside the fence; non-greedy so multiple separate
 # fences in one file are each matched individually rather than the whole
 # span from the first opening ``` to the last closing ``` collapsing into
@@ -136,9 +136,9 @@ def lint_readme(path: Path) -> LintResult:
     """
     problems: list[str] = []
     raw_content = path.read_text(encoding="utf-8")
-    # F1.3 review fix S2: strip fenced code blocks before any header
-    # extraction happens (both H1 and H2), so shell comments inside
-    # ```bash ... ``` blocks never get misread as markdown headers.
+    # Strip fenced code blocks before any header extraction happens (both H1
+    # and H2), so shell comments inside ```bash ... ``` blocks never get
+    # misread as markdown headers.
     content = _strip_code_fences(raw_content)
 
     # --- Section 1: title (H1) + one-liner (non-empty paragraph after H1) ---

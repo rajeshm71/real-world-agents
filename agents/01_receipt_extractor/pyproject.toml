@@ -6,23 +6,20 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "real-world-agents",  # for common.llm.resolve_model + common.pricing.cost_usd
-    "instructor>=1.7",
-    # Multi-provider support (user request): all three vision-capable
-    # providers Instructor's from_provider() can target. openai/anthropic/
-    # google-genai are also root workspace deps (transitively resolved via
-    # real-world-agents above); listed explicitly here too so a reader of
-    # this file alone sees the full picture of what this agent actually uses.
+    "instructor>=1.7",  # also provides the PDF multimodal helper used for openai/anthropic PDF input
+    # All three vision-capable providers Instructor's from_provider() can
+    # target. openai/anthropic/google-genai are also root workspace deps
+    # (transitively resolved via real-world-agents above); listed explicitly
+    # here too so a reader of this file alone sees the full picture of what
+    # this agent actually uses.
     "openai>=1.50",
     "anthropic>=0.121",
     "google-genai>=1.0",
     "pydantic>=2.5",
     "gradio>=4.44",
-    # F1.2 review S2: pypdf + pillow removed -- both were declared but never
-    # imported. pillow comes in transitively via gradio when needed. pypdf
-    # will be added back when PDF support is implemented (tracked in
-    # tasks/todo.md as a prerequisite for F1.5 -- Anthropic supports PDFs
-    # natively via `document` content blocks, so we may not need pypdf at
-    # all; decision deferred to the F1.5 real-provider verification pass).
+    # pillow comes in transitively via gradio when needed; no direct
+    # dependency on it. PDF handling goes through instructor's own
+    # multimodal PDF helper (see agent.py), not a standalone PDF library.
 ]
 
 [dependency-groups]

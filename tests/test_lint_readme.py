@@ -160,14 +160,12 @@ def test_agent_dir_without_readme_is_not_counted_as_shipped(tmp_path):
 
 
 def test_check_readme_does_not_crash_when_agents_dir_missing(tmp_path):
-    """F1.6 review fix S1 regression guard: check_readme() must not raise
-    FileNotFoundError when agents_dir doesn't exist. Previously the
-    `if agents_dir.exists()` guard was placed INSIDE the set comprehension
-    (filtering items after `.iterdir()` already ran), so it could never
-    actually prevent `.iterdir()` from raising on a nonexistent directory --
-    dead code that looked like a guard but wasn't one. A repo checked out
-    without ever running scripts/new_agent.py (agents/ genuinely absent)
-    must still get a clean, non-crashing report."""
+    """check_readme() must not raise FileNotFoundError when agents_dir
+    doesn't exist -- the `if agents_dir.exists()` guard has to run BEFORE
+    `.iterdir()`, not filter its results afterward, since `.iterdir()`
+    itself raises on a nonexistent directory before any inner filter could
+    run. A repo checked out without ever running scripts/new_agent.py
+    (agents/ genuinely absent) must still get a clean, non-crashing report."""
     agents_root = tmp_path / "agents"  # deliberately never created
 
     readme = tmp_path / "README.md"

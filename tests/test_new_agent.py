@@ -132,11 +132,10 @@ def test_scaffold_readme_has_all_required_section_headers(tmp_path):
 
 
 def test_scaffold_agent_py_is_syntactically_valid_python(tmp_path):
-    """F1.6 review fix S2 regression guard: the scaffolded agent.py used to
-    contain `def run(...) -> Result:` -- bare Ellipsis as a parameter list,
-    which is not valid Python syntax. A contributor running the scaffold and
-    immediately trying `python -m agent` (before editing anything) hit a
-    SyntaxError the tool itself introduced. Parse every generated .py file
+    """A bare Ellipsis parameter list (`def run(...) -> Result:`) is not
+    valid Python syntax -- a contributor running the scaffold and
+    immediately trying `python -m agent` before editing anything would hit
+    a SyntaxError the tool itself introduced. Parse every generated .py file
     with ast.parse() to guarantee this can't regress silently."""
     import ast
 

@@ -197,16 +197,15 @@ def test_partial_optional_sections_detected(tmp_path):
     assert result.optional_present == [9]
 
 
-# ---------- Code-fence handling (F1.3 review fix S2) ----------
+# ---------- Code-fence handling ----------
 
 
 def test_headers_inside_code_fences_are_ignored(tmp_path):
     """A shell comment like `# then edit .env` inside a ```bash fence must
     NOT be misread as an H1, and `## some heading`-shaped text inside a
-    fence must NOT be misread as an H2. Regression test for BUG A found in
-    the F1.3 review: the original regex-only approach had no fence-
-    awareness and would have produced spurious duplicate/out-of-order
-    errors on a README containing shell comments in its code blocks."""
+    fence must NOT be misread as an H2. A regex-only header check with no
+    fence-awareness would produce spurious duplicate/out-of-order errors on
+    a README containing shell comments in its code blocks."""
     content = (
         _GOOD_README
         + "\n```bash\n# This looks like an H1 but is inside a fence\n"

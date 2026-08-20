@@ -221,9 +221,7 @@ class GeminiLLM:
     NOTE: token-usage attribute names (`usage_metadata.prompt_token_count`
     etc.) are written from documented SDK conventions, not independently
     exercised against a real API call in this sandbox (no GEMINI_API_KEY
-    available). Verify before relying on this for a real run -- same
-    category of risk already tracked in tasks/todo.md for the receipt
-    extractor's Gemini path.
+    available). Verify before relying on this for a real run.
     """
 
     def __init__(self, api_key: str | None = None) -> None:

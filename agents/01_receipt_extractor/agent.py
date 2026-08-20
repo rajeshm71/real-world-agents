@@ -36,11 +36,13 @@ one `.create()` call path works across all three real providers; only the
 image content-block format below differs per provider (OpenAI's `image_url`
 data-URI format and Anthropic's `image`+`source` format are both long-stable
 and verified against public docs; the Gemini path is NOT independently
-verified against a real API call in this sandbox -- see tasks/todo.md).
+verified against a real API call in this sandbox).
 
-Currently ships image-only (JPEG/PNG/WebP/GIF). PDF support promised by
-SPEC.md §6.2 is tracked in tasks/todo.md as a prerequisite for F1.5 --
-Anthropic's `document` content block will handle it natively.
+Accepts images (JPEG/PNG/WebP/GIF) for all three providers, plus PDF for
+openai/anthropic via Instructor's cross-provider `PDF` multimodal helper
+(gemini raises a clear error for PDF input rather than mishandling it
+silently). PDF support is implemented but not yet verified against a real
+API call.
 """
 
 from __future__ import annotations
@@ -51,17 +53,17 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-# F1.3 review fix S1: dual-mode import. `.schemas` (relative) resolves when
-# this module is loaded AS a submodule of the 01_receipt_extractor package
-# (how tests/test_smoke.py imports it, via importlib since the dir name
-# starts with a digit). The bare `schemas` (absolute) resolves when this
-# file is run directly via `python -m agent` from inside the agent's own
-# directory (the documented CLI invocation in README.md) -- in that mode
-# Python has no parent-package context at all, so relative imports raise
-# ImportError. Both invocation styles must work; this try/except is the
-# standard pattern for a script that's also importable as a package member.
+# Dual-mode import. `.schemas` (relative) resolves when this module is
+# loaded AS a submodule of the 01_receipt_extractor package (how
+# tests/test_smoke.py imports it, via importlib since the dir name starts
+# with a digit). The bare `schemas` (absolute) resolves when this file is
+# run directly via `python -m agent` from inside the agent's own directory
+# (the documented CLI invocation in README.md) -- in that mode Python has no
+# parent-package context at all, so relative imports raise ImportError. Both
+# invocation styles must work; this try/except is the standard pattern for a
+# script that's also importable as a package member.
 try:
-    from .schemas import (  # F1.2 review S3: LineItem now imported at top instead of inside _mock_extraction
+    from .schemas import (  # LineItem imported here (not inside _mock_extraction) to keep it a module-level import
         ExtractedReceipt,
         LineItem,
     )
@@ -223,8 +225,7 @@ def _build_content(provider: str, media_type: str, b64_data: str, prompt: str) -
     GEMINI_API_KEY available) -- it relies on Instructor's own stated
     "provider-agnostic" design (accepting OpenAI-shaped content blocks and
     normalizing them internally). Verify before relying on this for a real
-    Gemini run; tracked in tasks/todo.md alongside the other real-key
-    verification items (S6/S7 from the F1.2 review).
+    Gemini run.
 
     PDF support (openai + anthropic only) uses
     `instructor.processing.multimodal.PDF`, verified to exist with a
@@ -275,9 +276,9 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
     unrecognized bubbles up as a generic ExtractionError with the original
     exception text preserved for debugging.
 
-    Priority order (F1.2 review S9: check exception CLASS before message
-    strings to prevent misclassification when a validation error happens to
-    contain words like "overloaded" or "invalid image" in its body):
+    Priority order (exception CLASS is checked before message strings, to
+    prevent misclassification when a validation error happens to contain
+    words like "overloaded" or "invalid image" in its body):
       1. Validation error (by class name) -> case 3, attach raw output
       2. HTTP status code 400 or bad-image message -> case 1
       3. HTTP status code 429 or rate-limit/overloaded message -> case 2
@@ -288,7 +289,7 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
     message_lower = str(exc).lower()
     status = getattr(exc, "status_code", None)
 
-    # Case 3 (checked FIRST per S9): schema validation failure. Instructor's
+    # Case 3 (checked FIRST -- see priority-order note above): schema validation failure. Instructor's
     # ValidationError / InstructorValidationError / pydantic's ValidationError
     # all contain "validationerror" in the class name. Message typically
     # includes the raw model output; attach it as `partial` so the UI can
@@ -325,10 +326,10 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
 
 
 def _build_validation_error(exc: Exception) -> ReceiptExtractionError:
-    """Extracted from _translate_api_error (F1.2 review S9) so both the
-    class-name path and the message-fallback path build the same partial-
-    attempt structure. Instructor exceptions carry `raw_output` (raw text
-    the model returned) and `errors()` (list of validation errors)."""
+    """Shared by both the class-name path and the message-fallback path in
+    _translate_api_error() so they build the same partial-attempt structure.
+    Instructor exceptions carry `raw_output` (raw text the model returned)
+    and `errors()` (list of validation errors)."""
     raw = getattr(exc, "raw_output", None) or str(exc)
     errors_attr = getattr(exc, "errors", None)
     if callable(errors_attr):
@@ -370,7 +371,6 @@ def _mock_extraction(image_bytes: bytes) -> ExtractedReceipt:
     Returns a fixed ExtractedReceipt without ever calling Instructor or
     Anthropic. Byte length of the input drives one field so tests can verify
     "the mock actually saw the input" if they want to."""
-    # F1.2 review S3: LineItem now imported at module top; local import removed.
     return ExtractedReceipt(
         vendor_name="Mock Vendor Ltd.",
         currency="USD",
@@ -406,10 +406,9 @@ def main() -> int:
         "canned response. Use --provider/--model to override per-invocation "
         "without changing env vars.",
     )
-    # F1.2 review S1: `image` was a required positional, so `python -m agent
-    # --ui` failed with "the following arguments are required: image."
-    # Made optional (nargs="?") so --ui works standalone; when not using
-    # --ui, absence of `image` produces a clear parser.error() message.
+    # `image` is optional (nargs="?") so `python -m agent --ui` can launch
+    # standalone without a positional argument; when not using --ui, absence
+    # of `image` produces a clear parser.error() message below instead.
     parser.add_argument(
         "image",
         type=Path,
@@ -433,9 +432,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.ui:
-        # F1.3 review fix S1: same dual-mode import pattern as the schemas
-        # import above -- `python -m agent --ui` from inside the agent's
-        # own directory has no parent-package context.
+        # Same dual-mode import pattern as the schemas import above --
+        # `python -m agent --ui` from inside the agent's own directory has
+        # no parent-package context.
         try:
             from .ui import build_ui
         except ImportError:

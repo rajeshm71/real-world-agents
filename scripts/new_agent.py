@@ -183,12 +183,9 @@ def resolve_provider() -> str:
     return os.environ.get("LLM_PROVIDER", "openai").lower()
 
 
-# F1.6 review fix S2: `def run(...) -> Result:` (bare Ellipsis as a
-# parameter list) is not valid Python syntax -- a contributor running this
-# scaffold immediately after `new_agent.py` (before editing anything) hit a
-# SyntaxError instead of a runnable "fill in the TODOs" stub. Real
-# parameter name + explicit `# TODO` comment instead, so the file parses
-# as-is and the placeholder-ness is communicated without breaking syntax.
+# A real parameter name (not a bare Ellipsis parameter list, which isn't
+# valid Python syntax) so the scaffolded file parses and runs as-is; the
+# `# TODO` communicates the placeholder-ness without breaking syntax.
 def run(input_data: str) -> Result:  # TODO: replace input_data with your real signature
     if resolve_provider() == "mock":
         return _mock_result(input_data)
