@@ -1,12 +1,12 @@
 # Adding a new agent
 
 This is the implementation-level companion to
-[CONTRIBUTING.md](../CONTRIBUTING.md)'s step-by-step overview — concrete file
+[CONTRIBUTING.md](../CONTRIBUTING.md)'s step-by-step overview: concrete file
 templates and a checklist for building an agent that passes every gate this
 repo enforces.
 
 Before writing code: open an issue with the "New agent" template and get a
-maintainer nod. See [CONTRIBUTING.md](../CONTRIBUTING.md) for why — mainly to
+maintainer nod. See [CONTRIBUTING.md](../CONTRIBUTING.md) for why: mainly to
 avoid you investing time in an agent that fails the R1 (real-world use case)
 or R3 (technique variety) bar, both explained in CONTRIBUTING.md's "Hard
 rules" section.
@@ -41,7 +41,7 @@ The one contract every agent's `agent.py` must satisfy: runnable via
 any real API key.
 
 ```python
-"""<Agent name> — agent #NN of real-world-agents.
+"""<Agent name>: agent #NN of real-world-agents.
 
 Technique demonstrated: <one line>.
 Why this technique for this use case: <why the framework fits>.
@@ -96,7 +96,7 @@ if __name__ == "__main__":
 ## 3. Real error handling (R5)
 
 Every agent must handle the obvious failure modes for its own inputs
-explicitly — not happy-path only. At minimum: malformed input, a rate-limit
+explicitly, not happy-path only. At minimum: malformed input, a rate-limit
 or transient API failure, and whatever "partial success" looks like for your
 technique. See `agents/01_receipt_extractor/agent.py`'s
 `_translate_api_error()` for a worked example (checks exception class before
@@ -111,10 +111,10 @@ Required sections, in order, checked by `python scripts/lint_agents.py`:
 3. `## Why this technique for this use case`
 4. `## What it does`
 5. `## How to run locally`
-6. `## Code walkthrough` — at least one bullet MUST point at where your R5
+6. `## Code walkthrough`: at least one bullet MUST point at where your R5
    error handling lives
 7. `## When to use / When NOT to use`
-8. `## Where this fails` — specific, honest examples, not generic warnings
+8. `## Where this fails`: specific, honest examples, not generic warnings
 
 Optional (earn a badge in the main README when present, not required to
 ship): `## Live demo`, `## Measured cost + latency`, `## Accuracy`.
@@ -146,7 +146,7 @@ python scripts/lint_readme.py
 ```
 
 This checks the main README's shipped-agents table actually matches the
-`agents/` directory — catches a forgotten README update or a stale entry for
+`agents/` directory: catches a forgotten README update or a stale entry for
 an agent that got renamed/removed.
 
 ## 7. Full local check before opening a PR

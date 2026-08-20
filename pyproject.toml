@@ -47,7 +47,7 @@ ignore = ["BLE001"]
 
 [tool.ruff.lint.per-file-ignores]
 # Agent directories follow an NN_name convention (01_receipt_extractor,
-# 02_contract_reviewer, etc.) — progressive-complexity ladder for readers.
+# 02_contract_reviewer, etc.): progressive-complexity ladder for readers.
 # The digit prefix means the directory name isn't a valid Python identifier,
 # so tests import via importlib. N999 is expected and intentional.
 "agents/*/__init__.py" = ["N999"]

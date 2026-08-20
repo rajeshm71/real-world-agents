@@ -1,7 +1,7 @@
 """Per-token USD pricing for the models this project uses.
 
 Ported from sibling rag-recipes' `recipes/pricing.py` and kept in sync (both
-projects share the same maintained rate table — updating one means updating
+projects share the same maintained rate table: updating one means updating
 the other).
 
 OpenAI prices verified against platform.openai.com/docs/models and
@@ -36,7 +36,7 @@ class ModelPricing:
     output_per_1m: float
     # Anthropic-only: price for tokens written to a fresh cache entry.
     # None for models with no separate cache-write tier (all OpenAI models
-    # here — their caching is automatic with no explicit write cost).
+    # here: their caching is automatic with no explicit write cost).
     cache_creation_per_1m: float | None = None
 
 

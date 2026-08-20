@@ -1,6 +1,6 @@
 """Pydantic schema for structured receipt/invoice extraction.
 
-The schema is the load-bearing part of this agent — Instructor uses it directly
+The schema is the load-bearing part of this agent: Instructor uses it directly
 as the response_model, and Claude vision fills it in from the image. Every
 field's presence and description here is a prompt to the model. Keep them
 concrete and specific; vague field descriptions produce vague extractions.
@@ -60,7 +60,7 @@ class ExtractedReceipt(BaseModel):
     vendor_tax_id: str | None = Field(
         None,
         description=(
-            "Vendor's tax/registration ID as a string — GSTIN (India), VAT (EU), "
+            "Vendor's tax/registration ID as a string: GSTIN (India), VAT (EU), "
             "EIN (US), etc. Preserve the original format; do not normalize."
         ),
     )
@@ -98,7 +98,7 @@ class ExtractedReceipt(BaseModel):
         ...,
         description=(
             "Final amount the customer paid or owes (subtotal + tax + fees - discounts). "
-            "REQUIRED — this is the load-bearing number for expense tracking."
+            "REQUIRED: this is the load-bearing number for expense tracking."
         ),
     )
 
@@ -119,7 +119,7 @@ class ExtractedReceipt(BaseModel):
     notes: str | None = Field(
         None,
         description=(
-            "Anything unusual worth surfacing to the user — 'partial payment', "
+            "Anything unusual worth surfacing to the user: 'partial payment', "
             "'reprint of original', discounts applied, tips, service charges, etc."
         ),
     )

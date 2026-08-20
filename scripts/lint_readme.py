@@ -1,5 +1,5 @@
 """Checks the main README's "Shipped agents" table matches the actual
-`agents/` directory — catches a forgotten README update after adding/
+`agents/` directory: catches a forgotten README update after adding/
 renaming/removing an agent, or a stale row left behind.
 
 The table is expected to link each row to its agent directory, e.g.:

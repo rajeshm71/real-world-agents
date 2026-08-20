@@ -319,11 +319,11 @@ def test_extract_receipt_rejects_pdf_for_gemini(monkeypatch):
 def test_prompt_file_exists_and_is_nonempty():
     """The prompt is load-bearing (it's what tells Claude how to extract).
     An empty or missing prompt file would silently degrade extraction quality
-    with no test signal — check both."""
+    with no test signal: check both."""
     prompt_path = _AGENT_DIR / "prompts" / "extract.txt"
     assert prompt_path.exists(), f"Prompt missing at {prompt_path}"
     content = prompt_path.read_text(encoding="utf-8")
-    assert len(content) > 100, "Prompt is suspiciously short — is it truncated?"
+    assert len(content) > 100, "Prompt is suspiciously short: is it truncated?"
     # Load-bearing instructions the prompt MUST include (guards against a
     # future edit that accidentally drops them).
     lower = content.lower()

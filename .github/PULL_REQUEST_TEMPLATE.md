@@ -24,7 +24,7 @@ uv run pytest
 - [ ] Agent's own code stays under ~500 LOC excluding UI (R2)
 - [ ] README passes `python scripts/lint_agents.py` (all 8 required sections, see CONTRIBUTING.md)
 - [ ] "Code walkthrough" section points at where the 3 real-error-handling cases live (R5)
-- [ ] "Where this fails" has specific, honest examples — not generic warnings (R10)
+- [ ] "Where this fails" has specific, honest examples, not generic warnings (R10)
 - [ ] At least one smoke test runs under `LLM_PROVIDER=mock`
 - [ ] Added to the main README's shipped-agents table (`python scripts/lint_readme.py` passes)
 - [ ] Linked issue: Fixes #

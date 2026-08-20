@@ -7,9 +7,9 @@ body:
     attributes:
       value: |
         Thanks for proposing a new agent! Please read
-        [CONTRIBUTING.md](../../CONTRIBUTING.md) — the "Hard rules" section
-        (R1: real-world use case, R3: technique variety) and the roadmap in
-        the main README — before filling this out. The questions below exist
+        [CONTRIBUTING.md](../../CONTRIBUTING.md), the "Hard rules" section
+        (R1: real-world use case, R3: technique variety), and the roadmap in
+        the main README, before filling this out. The questions below exist
         to check both bars up front.
   - type: textarea
     id: task
@@ -39,7 +39,7 @@ body:
     id: why-framework
     attributes:
       label: Why is this framework the right fit for this task?
-      description: Not "let's use X because it's popular" — explain what the pattern actually needs.
+      description: Not "let's use X because it's popular": explain what the pattern actually needs.
     validations:
       required: true
   - type: textarea

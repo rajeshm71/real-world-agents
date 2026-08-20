@@ -1,4 +1,4 @@
-"""Receipt/invoice extractor agent — agent #01 of real-world-agents.
+"""Receipt/invoice extractor agent: agent #01 of real-world-agents.
 
 Technique demonstrated: **structured extraction with Instructor + vision, across
 multiple providers**. Pydantic schema (see schemas.py) is passed as

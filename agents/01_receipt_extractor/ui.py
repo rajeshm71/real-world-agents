@@ -3,7 +3,7 @@
 Kept deliberately minimal: upload widget on the left, JSON output + cost
 estimate + partial-extraction warning banner (when applicable) on the right.
 That's it. If the reader wants to understand the extraction technique, they
-should read `agent.py` — this file is UI glue, not the load-bearing code.
+should read `agent.py`: this file is UI glue, not the load-bearing code.
 
 Launched via `uv run python -m agent --ui` or, when deployed to a HuggingFace
 Space, as the container's entry point.
@@ -50,7 +50,7 @@ _EXAMPLES_DIR = Path(__file__).parent / "examples"
 
 def _sample_receipt_paths() -> list[str]:
     """List example receipts (added under examples/). Returns [] if the
-    directory is empty — the UI just hides the sample buttons in that case.
+    directory is empty: the UI just hides the sample buttons in that case.
 
     Image types only -- deliberately excludes .pdf even though agent.py
     supports PDF input for openai/anthropic, because the `image` component
@@ -91,7 +91,7 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     elapsed_ms = (time.perf_counter() - start) * 1000
     json_output = json.dumps(result.model_dump(mode="json"), indent=2, default=str)
 
-    # Cost estimate (mock mode gives $0 — real mode uses a per-extraction
+    # Cost estimate (mock mode gives $0; real mode uses a per-extraction
     # ballpark below). Under mock we don't have real token counts; the
     # estimate is honest about being an estimate.
     # Must match extract_receipt()'s own resolution (resolve_provider(),
@@ -99,7 +99,7 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     # that and made the cost line show the wrong model.
     provider = resolve_provider()
     if provider == "mock":
-        cost_line = f"Extracted in {elapsed_ms:.0f}ms (mock mode — no real API call)"
+        cost_line = f"Extracted in {elapsed_ms:.0f}ms (mock mode, no real API call)"
     else:
         # ~$0.005/extraction with Claude Sonnet-5 vision (a dated-snapshot
         # ballpark, not per-call token tracking). If that becomes important,
