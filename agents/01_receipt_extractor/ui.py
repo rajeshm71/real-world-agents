@@ -28,19 +28,23 @@ import gradio as gr
 try:
     from .agent import (
         DEFAULT_MAX_TOKENS,
-        DEFAULT_MODEL,
         ReceiptExtractionError,
         _guess_media_type,
         extract_receipt,
+        resolve_provider,
     )
 except ImportError:
     from agent import (
         DEFAULT_MAX_TOKENS,
-        DEFAULT_MODEL,
         ReceiptExtractionError,
         _guess_media_type,
         extract_receipt,
+        resolve_provider,
     )
+
+# common.llm is the root workspace package (see agent.py's identical import
+# for the full rationale) -- never a relative import.
+from common.llm import resolve_model
 
 # F1.2 review S3: `logging` import + unused `logger` removed. If we later
 # need per-request logging in the UI, add `import logging` back at that
@@ -101,7 +105,8 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
         # here; if that becomes important we can wire common.pricing.cost_usd
         # to a token-tracking wrapper. F1.5 (accuracy eval) will measure real
         # cost more rigorously.
-        cost_line = f"Extracted in {elapsed_ms:.0f}ms · estimated cost ~$0.005 ({DEFAULT_MODEL})"
+        model = resolve_model(provider) if provider in {"openai", "anthropic", "gemini"} else provider
+        cost_line = f"Extracted in {elapsed_ms:.0f}ms · estimated cost ~$0.005 ({model})"
 
     return json_output, cost_line, ""
 
@@ -111,6 +116,8 @@ def build_ui() -> gr.Blocks:
     level) so importing this module doesn't spin up any UI state -- important
     for tests."""
     samples = _sample_receipt_paths()
+    provider = resolve_provider()
+    model = resolve_model(provider) if provider != "mock" else "mock"
 
     with gr.Blocks(title="Receipt Extractor", theme=gr.themes.Soft()) as app:
         gr.Markdown(
@@ -118,7 +125,7 @@ def build_ui() -> gr.Blocks:
             "Upload a receipt image; get clean structured JSON out. "
             "Powered by Anthropic Claude vision + [Instructor](https://python.useinstructor.com/) "
             "for schema-validated extraction.\n\n"
-            f"**Model:** `{DEFAULT_MODEL}` · **Max tokens:** {DEFAULT_MAX_TOKENS} · "
+            f"**Model:** `{model}` · **Max tokens:** {DEFAULT_MAX_TOKENS} · "
             "[Source code](https://github.com/rajeshm71/real-world-agents/tree/main/agents/01_receipt_extractor)"
         )
 
