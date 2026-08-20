@@ -42,8 +42,9 @@ ReceiptExtractionError = _agent_pkg.ReceiptExtractionError
 ExtractionAttempt = _agent_pkg.ExtractionAttempt
 _translate_api_error = _agent_pkg._translate_api_error
 resolve_provider = _agent_pkg.resolve_provider
-_build_image_content = _agent_pkg._build_image_content
+_build_content = _agent_pkg._build_content
 SUPPORTED_PROVIDERS = _agent_pkg.SUPPORTED_PROVIDERS
+_guess_media_type = _agent_pkg._guess_media_type
 ExtractedReceipt = _schemas_pkg.ExtractedReceipt
 LineItem = _schemas_pkg.LineItem
 
@@ -230,7 +231,7 @@ def test_extract_receipt_provider_kwarg_overrides_env(monkeypatch):
 
 
 def test_build_image_content_anthropic_shape():
-    content = _build_image_content("anthropic", "image/png", "ZmFrZQ==", "extract this")
+    content = _build_content("anthropic", "image/png", "ZmFrZQ==", "extract this")
     assert content[0]["type"] == "image"
     assert content[0]["source"]["type"] == "base64"
     assert content[0]["source"]["media_type"] == "image/png"
@@ -239,7 +240,7 @@ def test_build_image_content_anthropic_shape():
 
 
 def test_build_image_content_openai_shape():
-    content = _build_image_content("openai", "image/jpeg", "ZmFrZQ==", "extract this")
+    content = _build_content("openai", "image/jpeg", "ZmFrZQ==", "extract this")
     assert content[0]["type"] == "image_url"
     assert content[0]["image_url"]["url"] == "data:image/jpeg;base64,ZmFrZQ=="
     assert content[1] == {"type": "text", "text": "extract this"}
@@ -249,16 +250,62 @@ def test_build_image_content_gemini_uses_openai_shaped_fallback():
     """Gemini path is explicitly unverified (see agent.py module docstring)
     -- pins CURRENT behavior (same shape as OpenAI) so a future change is
     a deliberate decision, not an accidental drift."""
-    content = _build_image_content("gemini", "image/png", "ZmFrZQ==", "extract this")
+    content = _build_content("gemini", "image/png", "ZmFrZQ==", "extract this")
     assert content[0]["type"] == "image_url"
 
 
 def test_build_image_content_every_supported_provider_produces_two_blocks():
     for provider in SUPPORTED_PROVIDERS:
-        content = _build_image_content(provider, "image/png", "ZmFrZQ==", "prompt text")
+        content = _build_content(provider, "image/png", "ZmFrZQ==", "prompt text")
         assert len(content) == 2
         assert content[1]["type"] == "text"
         assert content[1]["text"] == "prompt text"
+
+
+# ---------- PDF content construction (openai + anthropic only) ----------
+# NOTE: these are structural tests only (isinstance / mock-mode), per the
+# module docstring on `_build_content` -- the PDF path has NOT been verified
+# against a real OpenAI or Anthropic API call in this sandbox.
+
+
+def test_guess_media_type_recognizes_pdf():
+    assert _guess_media_type(Path("invoice.pdf")) == "application/pdf"
+    assert _guess_media_type(Path("invoice.PDF")) == "application/pdf"
+
+
+def test_build_content_pdf_returns_instructor_pdf_object():
+    from instructor.processing.multimodal import PDF
+
+    content = _build_content("anthropic", "application/pdf", "ZmFrZQ==", "extract this")
+    assert content[0] == "extract this"
+    assert isinstance(content[1], PDF)
+
+
+def test_build_content_pdf_shape_identical_for_openai_and_anthropic():
+    """The PDF branch doesn't fork on provider -- Instructor's PDF class
+    handles cross-provider formatting internally, unlike the hand-built
+    image branches above."""
+    from instructor.processing.multimodal import PDF
+
+    openai_content = _build_content("openai", "application/pdf", "ZmFrZQ==", "prompt")
+    anthropic_content = _build_content("anthropic", "application/pdf", "ZmFrZQ==", "prompt")
+    assert isinstance(openai_content[1], PDF)
+    assert isinstance(anthropic_content[1], PDF)
+
+
+def test_extract_receipt_pdf_mock_mode_round_trips(monkeypatch):
+    """Mock mode bypasses provider/content branching entirely, so this only
+    proves the media_type plumbing doesn't break the existing mock path --
+    not a test of the real PDF content-block construction."""
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    result = extract_receipt(b"%PDF-1.4 fake pdf bytes", media_type="application/pdf")
+    assert isinstance(result, ExtractedReceipt)
+
+
+def test_extract_receipt_rejects_pdf_for_gemini(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(ReceiptExtractionError, match="PDF input is not yet supported"):
+        extract_receipt(b"%PDF-1.4 fake pdf bytes", media_type="application/pdf", provider="gemini")
 
 
 def test_prompt_file_exists_and_is_nonempty():

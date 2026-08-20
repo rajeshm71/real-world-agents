@@ -144,8 +144,10 @@ def extract_receipt(
     """Extract structured receipt data from an image.
 
     Args:
-        image_bytes: raw bytes of a JPEG/PNG receipt image.
-        media_type: MIME type of the image (e.g. "image/jpeg", "image/png").
+        image_bytes: raw bytes of a JPEG/PNG receipt image or a PDF.
+        media_type: MIME type of the input (e.g. "image/jpeg", "image/png",
+            "application/pdf"). PDF is only supported for provider "openai"
+            or "anthropic" -- "gemini" raises ReceiptExtractionError.
         provider: "openai" (default) / "anthropic" / "gemini" / "mock".
             Defaults to the LLM_PROVIDER env var if not passed (see
             resolve_provider()).
@@ -171,11 +173,17 @@ def extract_receipt(
         # for why (we don't want tests to depend on Instructor's internals).
         return _mock_extraction(image_bytes)
 
+    if media_type == "application/pdf" and resolved_provider == "gemini":
+        raise ReceiptExtractionError(
+            "PDF input is not yet supported with LLM_PROVIDER=gemini. "
+            "Use 'openai' or 'anthropic' for PDF receipts, or convert to an image first."
+        )
+
     resolved_model = model or resolve_model(resolved_provider)
     client = _client if _client is not None else _get_real_client(resolved_provider, resolved_model)
     prompt = _load_prompt()
     b64_data = base64.b64encode(image_bytes).decode("ascii")
-    content = _build_image_content(resolved_provider, media_type, b64_data, prompt)
+    content = _build_content(resolved_provider, media_type, b64_data, prompt)
 
     # Instructor's unified .create() handles retries on schema validation
     # across every provider (from_provider()'s whole point). Provider API
@@ -194,17 +202,33 @@ def extract_receipt(
     return result
 
 
-def _build_image_content(provider: str, media_type: str, b64_data: str, prompt: str) -> list[dict]:
-    """Build the provider-specific image+text content-block list for one
-    Instructor `.create()` call. OpenAI and Anthropic formats are verified
-    against stable, long-documented public API shapes. The Gemini branch is
-    NOT independently verified against a real API call in this sandbox (no
+def _build_content(provider: str, media_type: str, b64_data: str, prompt: str) -> list:
+    """Build the provider-specific content list for one Instructor `.create()`
+    call. Handles both images (dict content blocks, hand-built per provider)
+    and PDFs (Instructor's own cross-provider `PDF` multimodal helper).
+
+    OpenAI and Anthropic image formats are verified against stable,
+    long-documented public API shapes. The Gemini image branch is NOT
+    independently verified against a real API call in this sandbox (no
     GEMINI_API_KEY available) -- it relies on Instructor's own stated
     "provider-agnostic" design (accepting OpenAI-shaped content blocks and
     normalizing them internally). Verify before relying on this for a real
     Gemini run; tracked in tasks/todo.md alongside the other real-key
     verification items (S6/S7 from the F1.2 review).
+
+    PDF support (openai + anthropic only; gemini raises before reaching this
+    function) uses `instructor.processing.multimodal.PDF`, verified to exist
+    with a `from_base64(data_uri)` classmethod against the actually-installed
+    library (instructor>=1.7, this file's pin) via `inspect.signature()` --
+    NOT verified against a real end-to-end API response, since no API key was
+    available in this sandbox. Treat the PDF path the same as the untested
+    S6/S7 items until it's been run against a live call.
     """
+    if media_type == "application/pdf":
+        from instructor.processing.multimodal import PDF
+
+        return [prompt, PDF.from_base64(f"data:application/pdf;base64,{b64_data}")]
+
     if provider == "anthropic":
         return [
             {
@@ -371,7 +395,8 @@ def main() -> int:
         type=Path,
         nargs="?",
         default=None,
-        help="Path to a receipt image (JPEG/PNG/WebP/GIF). Omit when using --ui.",
+        help="Path to a receipt image (JPEG/PNG/WebP/GIF) or PDF (openai/anthropic only). "
+        "Omit when using --ui.",
     )
     parser.add_argument("--ui", action="store_true", help="Launch Gradio UI instead of CLI.")
     parser.add_argument(
@@ -435,6 +460,7 @@ def _guess_media_type(path: Path) -> str:
         ".png": "image/png",
         ".webp": "image/webp",
         ".gif": "image/gif",
+        ".pdf": "application/pdf",
     }.get(ext, "image/jpeg")
 
 
