@@ -91,7 +91,7 @@ Under 500 LOC total (excluding UI). Read these in order to understand the patter
 
 ## Where this fails
 
-Specific examples from spot-checks, not generic warnings:
+Specific examples from spot-checks:
 
 - **Blurry phone photos of thermal receipts**: the ink is already low-contrast; blurring pushes character recognition below usable. Symptom: line-item totals off by an order of magnitude, or missing entirely. Fix: retake the photo, hold the phone steady.
 - **Handwritten receipts**: vision models handle typed text well but are inconsistent on cursive or messy print (varies by provider/model; not independently benchmarked across all three). Symptom: `notes` field gets filled with "handwritten portion illegible" or line items are silently skipped.
@@ -100,7 +100,7 @@ Specific examples from spot-checks, not generic warnings:
 - **PDF input** is supported for `openai` and `anthropic` (not `gemini`, which raises a clear error instead of silently mishandling it) via Instructor's cross-provider PDF helper, but this path has not been verified against a real API call. If it fails, converting the receipt to an image first is the verified fallback.
 - **Non-receipt images** (a photo of a landscape, a screenshot of a webpage): the model returns a `ValidationError` because there's no `total` to extract; the UI shows the raw model output in the warning banner ("this doesn't appear to be a receipt") rather than silently returning zeros.
 - **Gemini path is unverified**: the image content-block format for Gemini (via Instructor's provider-agnostic message handling) has not been exercised against a real Gemini API call (no `GEMINI_API_KEY` available during development). If it fails, OpenAI or Anthropic are the verified fallback providers, just change `LLM_PROVIDER`.
-- **Tax extraction is the weakest field (46% accuracy, see "Accuracy" below).** Many receipts print tax as a percentage line or omit it from a clearly labeled "tax" row entirely (folded into a service charge, or just implied by the gap between subtotal and total). The model sometimes computes what it thinks tax should be rather than reading a printed figure, which agrees with the receipt's total but not with the ground truth's tax breakdown. Real, measured weakness, not a hypothetical one.
+- **Tax extraction is the weakest field (46% accuracy, see "Accuracy" below).** Many receipts print tax as a percentage line or omit it from a clearly labeled "tax" row entirely (folded into a service charge, or just implied by the gap between subtotal and total). The model sometimes computes what it thinks tax should be rather than reading a printed figure, which agrees with the receipt's total but not with the ground truth's tax breakdown. Real, measured weakness.
 
 ## Accuracy
 

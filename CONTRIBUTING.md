@@ -81,7 +81,7 @@ to it.
 - **R10. No invented scope + honest failure modes.** A new agent needs a new
   issue, a maintainer nod, and an articulated differentiation angle from any
   close OSS competitor. Every agent's README has a "Where this fails"
-  section with specific examples, not generic warnings.
+  section with specific examples.
 
 ## Agent README template
 
@@ -98,7 +98,7 @@ optional badges that show up in the main README's agent grid.
 7. **When to use / when NOT to use**: bullet lists for each
 8. **Where this fails**: honest failure modes with specific examples
 9. **Optional: Live demo**: link to a HuggingFace Space if one exists
-10. **Optional: Measured cost + latency**: from real runs, not estimates
+10. **Optional: Measured cost + latency**: from real runs
 11. **Optional: Accuracy**: from `eval/cases.jsonl` if applicable
 
 ## Proposing a new agent: step-by-step

@@ -114,7 +114,7 @@ Required sections, in order, checked by `python scripts/lint_agents.py`:
 6. `## Code walkthrough`: at least one bullet MUST point at where your R5
    error handling lives
 7. `## When to use / When NOT to use`
-8. `## Where this fails`: specific, honest examples, not generic warnings
+8. `## Where this fails`: specific, honest examples
 
 Optional (earn a badge in the main README when present, not required to
 ship): `## Live demo`, `## Measured cost + latency`, `## Accuracy`.

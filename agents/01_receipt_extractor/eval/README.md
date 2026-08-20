@@ -113,4 +113,4 @@ Per-field accuracy is computed for scalar fields (`vendor_name`, `currency`,
 the extracted line-item count match the expected count), not per-item
 field accuracy. Per-item scoring would need a matching strategy (line items
 aren't naturally ordered/keyed) that's out of scope for this pass; tracked
-as a possible future improvement, not a current gap.
+as a possible future improvement.

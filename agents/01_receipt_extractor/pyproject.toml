@@ -19,7 +19,7 @@ dependencies = [
     "gradio>=4.44",
     # pillow comes in transitively via gradio when needed; no direct
     # dependency on it. PDF handling goes through instructor's own
-    # multimodal PDF helper (see agent.py), not a standalone PDF library.
+    # multimodal PDF helper (see agent.py).
 ]
 
 [dependency-groups]

@@ -4,17 +4,18 @@ Deployable AI agents for real-world use cases. Each agent solves a real problem,
 
 ## What this repo is
 
-A growing catalog of AI agents. Each one teaches exactly ONE technique (structured extraction, ReAct, multi-agent collaboration, meta-optimization, and so on), applied to a task real people would actually use, not a toy demo. Read the code, copy what you need.
+A growing catalog of AI agents. Each one teaches exactly ONE technique (structured extraction, ReAct, multi-agent collaboration, meta-optimization, and so on), applied to a task real people would actually use. Read the code, copy what you need.
 
 ## Project status
 
-**1 of 15+ planned agents shipped.** Agent #01 (receipt/invoice extractor) is live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**2 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor) and #02 (contract reviewer) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
 | # | Agent | Technique demonstrated | Framework | Live demo | Real use case |
 |---|---|---|---|---|---|
 | 01 | [Receipt / invoice extractor](agents/01_receipt_extractor/) | Structured extraction with vision | Instructor + OpenAI/Anthropic/Gemini | N/A | SMB expense tracking |
+| 02 | [Contract reviewer](agents/02_contract_reviewer/) | Long-context single-pass + hand-rolled JSON-validate-retry (no framework) | `common/llm.py` multi-provider (OpenAI default, Anthropic/Gemini switchable) | N/A | Legal-review triage for freelancers / small businesses |
 
 ## Roadmap
 
@@ -22,7 +23,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
-| 02 | Contract reviewer | Long-context analysis + flag extraction | Direct Anthropic SDK (no framework) | Legal review (showing when "no framework" is the right choice) |
 | 03 | Chat with your CSV | Text-to-SQL with retry-on-error loops | LangGraph (state machine) | Non-technical users querying data |
 | 04 | Meeting notes → action items | ReAct pattern for extraction + prioritization | OpenAI Agents SDK | Meeting follow-through |
 | 05 | Multi-agent research assistant | Multi-agent collaboration (researcher + writer + editor) | CrewAI | Deep-dive research on a topic |
@@ -54,7 +54,7 @@ Running any agent against a real provider costs real money: every agent's own RE
 
 ## How to read this repo
 
-Suggested order, not a requirement:
+Suggested order:
 
 1. Start with **#01** (receipt extractor) for structured extraction: the most common technique you'll reach for.
 2. Once more agents ship: **#13** (from-scratch agent loop) shows what agent frameworks are actually doing under the hood, useful context before diving into framework-specific agents.
@@ -66,7 +66,7 @@ See [docs/adding_an_agent.md](docs/adding_an_agent.md) for the full checklist, a
 
 ## Design principles
 
-- **Real-world use case first.** Every agent solves a task a real person or business would use in production, not a framework demo.
+- **Real-world use case first.** Every agent solves a task a real person or business would use in production.
 - **Technique variety, not framework variety.** No two agents teach the same technique. Framework is an implementation detail.
 - **Simple enough to read in one sitting.** Each agent's own code stays under ~500 lines (excluding UI). If you can't understand it without reading a shared abstraction first, the abstraction shouldn't exist.
 
