@@ -91,9 +91,9 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     elapsed_ms = (time.perf_counter() - start) * 1000
     json_output = json.dumps(result.model_dump(mode="json"), indent=2, default=str)
 
-    # Cost estimate (mock mode gives $0 — real mode estimates from the SPEC's
-    # §13 per-extraction numbers). Under mock we don't have real token counts;
-    # the estimate is honest about being an estimate.
+    # Cost estimate (mock mode gives $0 — real mode uses a per-extraction
+    # ballpark below). Under mock we don't have real token counts; the
+    # estimate is honest about being an estimate.
     # Must match extract_receipt()'s own resolution (resolve_provider(),
     # default "openai") -- a hardcoded default here previously drifted from
     # that and made the cost line show the wrong model.
@@ -101,11 +101,9 @@ def _run_extraction(image_path: str | None) -> tuple[str, str, str]:
     if provider == "mock":
         cost_line = f"Extracted in {elapsed_ms:.0f}ms (mock mode — no real API call)"
     else:
-        # SPEC §13: ~$0.005/extraction with Claude Sonnet-5 vision. Using the
-        # dated snapshot ballpark rather than tracking real tokens per-call
-        # here; if that becomes important we can wire common.pricing.cost_usd
-        # to a token-tracking wrapper. F1.5 (accuracy eval) will measure real
-        # cost more rigorously.
+        # ~$0.005/extraction with Claude Sonnet-5 vision (a dated-snapshot
+        # ballpark, not per-call token tracking). If that becomes important,
+        # wire common.pricing.cost_usd to a real token-tracking wrapper.
         model = resolve_model(provider) if provider in {"openai", "anthropic", "gemini"} else provider
         cost_line = f"Extracted in {elapsed_ms:.0f}ms · estimated cost ~$0.005 ({model})"
 

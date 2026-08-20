@@ -1,8 +1,8 @@
 """Smoke tests for the receipt extractor agent.
 
-All tests run under LLM_PROVIDER=mock per SPEC R8 -- CI never touches a real
-Anthropic API key. Real-provider tests are a manual maintainer check before
-F1 ship (SPEC §16 F1.1 acceptance).
+All tests run under LLM_PROVIDER=mock (R8 in CONTRIBUTING.md's hard rules)
+-- CI never touches a real API key. Real-provider tests are a manual
+maintainer check before shipping.
 
 Covers:
 - Mock extraction returns a valid ExtractedReceipt (proves the end-to-end

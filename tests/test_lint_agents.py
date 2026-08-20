@@ -1,4 +1,4 @@
-"""Tests for scripts/lint_agents.py -- the SPEC §8.1 template enforcer.
+"""Tests for scripts/lint_agents.py -- the README template enforcer.
 
 Covers:
 - OK path on a well-formed README fixture

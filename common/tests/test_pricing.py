@@ -169,14 +169,14 @@ def test_cost_embedding_model_no_output():
     assert cost == pytest.approx(0.02)
 
 
-# ---------- Realistic F1 sanity check ----------
+# ---------- Realistic receipt-extractor sanity check ----------
 
 
-def test_f1_receipt_extractor_cost_matches_spec_estimate():
-    """SPEC.md §13 estimates ~$0.005 per receipt extraction (Claude Sonnet-5
-    with vision: ~1500 input tokens + ~200 output tokens). This test pins
-    that estimate -- if the pricing table changes, this test catches the
-    change and forces us to update the SPEC's cost estimate too."""
+def test_receipt_extractor_cost_matches_documented_estimate():
+    """The receipt extractor's README estimates ~$0.005 per extraction
+    (Claude Sonnet-5 with vision: ~1500 input tokens + ~200 output tokens).
+    This test pins that estimate -- if the pricing table changes, this test
+    catches the drift and forces us to update the README's cost estimate too."""
     cost = cost_usd(
         "claude-sonnet-5",
         input_tokens=1500,
@@ -205,7 +205,7 @@ def test_embedding_pricing_entries_have_no_output_cost():
 
 
 def test_claude_cache_rates_follow_documented_multipliers():
-    """Per Anthropic docs (2026-08-12 verification, SPEC.md R7):
+    """Per Anthropic docs (2026-08-12 verification):
     cache-read = 0.1x base input, cache-write = 1.25x base input.
     This test pins the multiplier semantics so a future rate update
     that violates the documented ratio would fail loudly."""

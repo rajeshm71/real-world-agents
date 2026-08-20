@@ -1,4 +1,5 @@
-"""Enforces SPEC.md §8.1's 11-section README template on every shipped agent.
+"""Enforces the 11-section README template (see CONTRIBUTING.md) on every
+shipped agent.
 
 Sections 1-8 are REQUIRED for shipping (R4). Sections 9-11 are OPTIONAL
 badges that show up in the main README's agent grid when present.
@@ -130,9 +131,10 @@ def _extract_h2_sequence(content: str) -> list[str]:
 
 
 def lint_readme(path: Path) -> LintResult:
-    """Lint one agent's README against SPEC §8.1. Returns LintResult with
-    a (possibly empty) list of human-readable problems + a list of which
-    optional sections (9-11) are present.
+    """Lint one agent's README against the required template (see
+    CONTRIBUTING.md). Returns LintResult with a (possibly empty) list of
+    human-readable problems + a list of which optional sections (9-11) are
+    present.
     """
     problems: list[str] = []
     raw_content = path.read_text(encoding="utf-8")
@@ -150,7 +152,7 @@ def lint_readme(path: Path) -> LintResult:
         if not one_liner:
             problems.append(
                 "section 1 incomplete: H1 title present but no one-liner paragraph "
-                "immediately below it (SPEC §8.1: 'clear tool description in plain English')"
+                "immediately below it (needs a clear tool description in plain English)"
             )
 
     # --- Sections 2-8 (REQUIRED) + optional 9-11 detection ---
@@ -165,7 +167,7 @@ def lint_readme(path: Path) -> LintResult:
             if count > 1:
                 problems.append(
                     f"duplicate section: keyword {keyword!r} appears in {count} H2 titles "
-                    f"(each SPEC §8.1 section must appear at most once)"
+                    f"(each required section must appear at most once)"
                 )
 
     # Find each required section's position; check presence and order.

@@ -8,7 +8,8 @@ repo enforces.
 Before writing code: open an issue with the "New agent" template and get a
 maintainer nod. See [CONTRIBUTING.md](../CONTRIBUTING.md) for why — mainly to
 avoid you investing time in an agent that fails the R1 (real-world use case)
-or R3 (technique variety) bar, both explained in [SPEC.md](../SPEC.md) §17.
+or R3 (technique variety) bar, both explained in CONTRIBUTING.md's "Hard
+rules" section.
 
 ## 1. Scaffold the directory
 
@@ -21,7 +22,7 @@ with TODO comments. `<NN>` is the next unused two-digit number.
 
 ```
 agents/NN_<short-name>/
-├── README.md              # fill in per §8.1's 8 required sections
+├── README.md              # fill in the 8 required sections (see §4 below)
 ├── pyproject.toml         # your own runtime deps (budget: ≤10)
 ├── agent.py               # main entry point, runnable via `python -m agent`
 ├── schemas.py             # Pydantic models, if your technique uses them
@@ -101,7 +102,7 @@ technique. See `agents/01_receipt_extractor/agent.py`'s
 `_translate_api_error()` for a worked example (checks exception class before
 message strings, attaches partial output for the UI to show).
 
-## 4. The README (§8.1 template)
+## 4. The README template
 
 Required sections, in order, checked by `python scripts/lint_agents.py`:
 

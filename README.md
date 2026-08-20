@@ -37,8 +37,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 | 14 | Podcast episode processor | Audio → transcript → chapters + summary | Whisper + Anthropic | Creator tool |
 | 15 | Business card / ID extractor | Structured extraction with vision (variant of #01) | Instructor + Anthropic | KYC / contact capture |
 
-Full rationale for this list — including what's deliberately excluded and why — is in [SPEC.md](SPEC.md) §7.
-
 ## Quick start
 
 ```bash
@@ -52,7 +50,7 @@ No API key is required to explore the code or run tests — every test suite run
 
 ## Cost note
 
-Running any agent against a real provider costs real money — every agent's own README documents its per-run cost once measured. Provider and model are fully configurable (OpenAI, Anthropic, or Gemini; see [`.env.example`](.env.example) for every option, including per-provider model overrides). No provider is hardcoded, and no provider is required to develop against — mock mode is the default for CI and local test runs. See [SPEC.md](SPEC.md) §13 for the cost model this project follows.
+Running any agent against a real provider costs real money — every agent's own README documents its per-run cost once measured. Provider and model are fully configurable (OpenAI, Anthropic, or Gemini; see [`.env.example`](.env.example) for every option, including per-provider model overrides). No provider is hardcoded, and no provider is required to develop against — mock mode is the default for CI and local test runs.
 
 ## How to read this repo
 
@@ -68,9 +66,9 @@ See [docs/adding_an_agent.md](docs/adding_an_agent.md) for the full checklist, a
 
 ## Design principles
 
-- **Real-world use case first.** Every agent solves a task a real person or business would use in production — not a framework demo. See [SPEC.md](SPEC.md) R1.
-- **Technique variety, not framework variety.** No two agents teach the same technique. Framework is an implementation detail. See [SPEC.md](SPEC.md) R3.
-- **Simple enough to read in one sitting.** Each agent's own code stays under ~500 lines (excluding UI). If you can't understand it without reading a shared abstraction first, the abstraction shouldn't exist. See [SPEC.md](SPEC.md) R2.
+- **Real-world use case first.** Every agent solves a task a real person or business would use in production — not a framework demo.
+- **Technique variety, not framework variety.** No two agents teach the same technique. Framework is an implementation detail.
+- **Simple enough to read in one sitting.** Each agent's own code stays under ~500 lines (excluding UI). If you can't understand it without reading a shared abstraction first, the abstraction shouldn't exist.
 
 ## Non-goals
 

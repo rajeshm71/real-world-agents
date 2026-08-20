@@ -1,4 +1,5 @@
-"""Scaffolds a new agent's directory tree, per SPEC.md §8.
+"""Scaffolds a new agent's directory tree (see docs/adding_an_agent.md for
+the full structure and rationale).
 
 Run:
     python scripts/new_agent.py <short-name>
@@ -93,8 +94,8 @@ TODO: one-liner description here.
 
 ## Technique demonstrated
 
-TODO: what pattern does this teach? See SPEC.md R3 -- must be a technique
-not already covered by another agent.
+TODO: what pattern does this teach? See CONTRIBUTING.md's R3 -- must be a
+technique not already covered by another agent.
 
 ## Why this technique for this use case
 
@@ -122,7 +123,7 @@ TODO.
 ## Where this fails
 
 TODO: specific, honest failure modes with real examples -- not generic
-warnings. See docs/adding_an_agent.md and SPEC.md R10.
+warnings. See docs/adding_an_agent.md and CONTRIBUTING.md's R10.
 """,
         encoding="utf-8",
     )
@@ -237,7 +238,7 @@ class Result(BaseModel):
 
     (agent_dir / "tests" / "test_smoke.py").write_text(
         f'''"""Smoke tests for TODO-agent-name. All run under LLM_PROVIDER=mock
-per SPEC R8 -- CI never touches a real API key.
+(CONTRIBUTING.md's R8) -- CI never touches a real API key.
 """
 
 from __future__ import annotations

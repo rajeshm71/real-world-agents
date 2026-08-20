@@ -1,6 +1,6 @@
 """Tests for common/llm.py. All tests run against MockLLM (LLM_PROVIDER=mock)
-per SPEC.md R8 -- no real API keys in CI. Real-provider smoke tests are run
-manually by the maintainer before F1 ship.
+-- CONTRIBUTING.md's R8 rule: no real API keys in CI. Real-provider smoke
+tests are run manually by the maintainer before shipping.
 """
 
 from __future__ import annotations

@@ -12,8 +12,8 @@ happen to arrive as images. Instructor collapses "prompt the model + parse JSON
 Instructor you'd hand-roll all four steps. This is exactly what the pattern is
 designed for.
 
-Real-error-handling per SPEC R5: three concrete failure modes are handled
-explicitly (see extract_receipt below):
+Real error handling (R5 in CONTRIBUTING.md's hard rules): three concrete
+failure modes are handled explicitly (see extract_receipt below):
   1. Malformed/unreadable image -> ReceiptExtractionError with friendly message
   2. Rate limit / transient API failure -> exponential backoff via Instructor's
      max_retries, then surface the error rather than looping forever

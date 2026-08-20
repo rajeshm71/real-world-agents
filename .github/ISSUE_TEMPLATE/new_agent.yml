@@ -6,9 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for proposing a new agent! Please read [SPEC.md](../../SPEC.md) §7
-        (the roadmap and its "excluded" list) and §17 (R1, R3) before filling
-        this out — the questions below exist to check both bars up front.
+        Thanks for proposing a new agent! Please read
+        [CONTRIBUTING.md](../../CONTRIBUTING.md) — the "Hard rules" section
+        (R1: real-world use case, R3: technique variety) and the roadmap in
+        the main README — before filling this out. The questions below exist
+        to check both bars up front.
   - type: textarea
     id: task
     attributes:
@@ -29,7 +31,7 @@ body:
     id: technique
     attributes:
       label: What technique/framework does this demonstrate?
-      description: Must be a technique not already covered by another agent (SPEC.md R3). Check the roadmap table first.
+      description: Must be a technique not already covered by another agent (see CONTRIBUTING.md R3). Check the roadmap table first.
       placeholder: "e.g. ReAct pattern via OpenAI Agents SDK"
     validations:
       required: true
@@ -44,6 +46,6 @@ body:
     id: competitors
     attributes:
       label: What's the closest existing OSS competitor, and how does this differ?
-      description: See SPEC.md §7's "excluded" list for the level of scrutiny expected here. If this collides head-on with a dominant project, it likely won't be accepted.
+      description: If this collides head-on with a dominant OSS project, it likely won't be accepted -- see CONTRIBUTING.md for the level of scrutiny expected here.
     validations:
       required: true

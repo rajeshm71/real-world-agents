@@ -9,7 +9,7 @@ authors = [{ name = "Rajesh Mane", email = "rajeshmane711@gmail.com" }]
 dependencies = [
     "openai>=1.50",
     "anthropic>=0.121",
-    "google-genai>=1.0",  # SPEC R6 bumped 3->4: multi-provider support (user request)
+    "google-genai>=1.0",  # 4th common/ dependency (R6 in CONTRIBUTING.md caps this at 4): Gemini as a first-class provider, no single provider hardcoded
     "pydantic>=2.5",
 ]
 
@@ -46,7 +46,7 @@ target-version = "py311"
 ignore = ["BLE001"]
 
 [tool.ruff.lint.per-file-ignores]
-# Agent directories follow SPEC.md §8's NN_name convention (01_receipt_extractor,
+# Agent directories follow an NN_name convention (01_receipt_extractor,
 # 02_contract_reviewer, etc.) — progressive-complexity ladder for readers.
 # The digit prefix means the directory name isn't a valid Python identifier,
 # so tests import via importlib. N999 is expected and intentional.

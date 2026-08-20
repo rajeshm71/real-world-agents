@@ -1,6 +1,6 @@
-"""Accuracy eval harness for the receipt extractor. Per SPEC.md F1.5: scores
-extract_receipt() against a hand-labeled set of real receipts, prints and
-writes a per-field accuracy table.
+"""Accuracy eval harness for the receipt extractor. Scores extract_receipt()
+against a hand-labeled set of real receipts, prints and writes a per-field
+accuracy table.
 
 Run (from inside agents/01_receipt_extractor/, real API key required):
     LLM_PROVIDER=openai uv run python eval/run_eval.py

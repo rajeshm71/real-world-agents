@@ -1,5 +1,6 @@
 # Local-only working notes (not published)
 tasks/
+SPEC.md
 
 # Python
 __pycache__/

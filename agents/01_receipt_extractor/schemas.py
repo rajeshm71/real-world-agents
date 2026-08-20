@@ -5,10 +5,10 @@ as the response_model, and Claude vision fills it in from the image. Every
 field's presence and description here is a prompt to the model. Keep them
 concrete and specific; vague field descriptions produce vague extractions.
 
-Schema kept deliberately minimal at v1 per SPEC.md §6.2. Fields will expand
-based on real user feedback, per SPEC R10 (no invented scope). What's here
-is what a bookkeeper needs to categorize a purchase; anything more speculative
-waits for a real user asking for it.
+Schema kept deliberately minimal at v1. Fields will expand based on real
+user feedback (R10 in CONTRIBUTING.md's hard rules: no invented scope).
+What's here is what a bookkeeper needs to categorize a purchase; anything
+more speculative waits for a real user asking for it.
 """
 
 from __future__ import annotations

@@ -1,10 +1,10 @@
 """LLM adapter for real-world-agents.
 
-Contract fixed by SPEC.md §10: `LLM.complete()` returns an `LLMResponse` with
-text, token counts, cached-token count (for prompt-caching cost tracking), and
-latency. Four concrete implementations ship here: `OpenAILLM`, `AnthropicLLM`,
-`GeminiLLM`, and `MockLLM` (deterministic, used in CI per SPEC.md R8 -- CI
-never touches a real API key, for any provider).
+`LLM.complete()` returns an `LLMResponse` with text, token counts,
+cached-token count (for prompt-caching cost tracking), and latency. Four
+concrete implementations ship here: `OpenAILLM`, `AnthropicLLM`, `GeminiLLM`,
+and `MockLLM` (deterministic, used in CI per CONTRIBUTING.md's R8 -- CI never
+touches a real API key, for any provider).
 
 Provider + model are both user-configurable via env vars (never hardcoded to
 one provider) -- this project is OSS and every user brings their own key(s).
@@ -23,7 +23,6 @@ Agents that use a framework's own client (Instructor, LangGraph, CrewAI,
 PydanticAI, DSPy) skip this module entirely -- the framework's own client sits
 directly against the provider SDK. This adapter exists for agents that DON'T
 need a framework (e.g., the contract reviewer, the from-scratch agent loop).
-See SPEC.md §4.1 and §10 for the rationale.
 """
 
 from __future__ import annotations
@@ -38,7 +37,8 @@ from typing import Protocol
 # 2026-08-11 (OpenAI, ported from sibling rag-recipes) and 2026-08-13
 # (Anthropic, Gemini) -- see common/pricing.py's module docstring for the
 # full verification notes, including the Gemini-has-no-dated-snapshot
-# caveat. Re-verify per SPEC.md R7 before relying on these for a real run.
+# caveat. Re-verify before relying on these for a real run -- model version
+# pinning is R7 in CONTRIBUTING.md's hard rules.
 DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4.1-mini-2025-04-14",
     "anthropic": "claude-sonnet-5",

@@ -1,8 +1,8 @@
 # Receipt extractor eval set
 
-This directory is the accuracy eval harness for agent #01, per SPEC.md F1.5:
-20 real receipts, hand-labeled ground truth, per-field accuracy measured and
-printed in the agent's README once run.
+This directory is the accuracy eval harness for agent #01: 20 real receipts,
+hand-labeled ground truth, per-field accuracy measured and printed in the
+agent's README once run.
 
 **Status: run.** 20 cases scored against `LLM_PROVIDER=openai`
 (`gpt-4.1-mini-2025-04-14`) on 2026-08-14. Results in `results.md` and
@@ -81,7 +81,7 @@ same kind of line items, same currency/formatting quirks) — the whole point
 is to measure accuracy against realistic documents, not synthetic ones.
 Never commit a receipt with real personal or financial information.
 
-### Target composition (per SPEC.md §16 F1.5)
+### Target composition
 
 20 cases, ideally spanning: a few restaurant/retail thermal receipts, a few
 formal invoices (with tax breakdowns and multiple line items), at least one

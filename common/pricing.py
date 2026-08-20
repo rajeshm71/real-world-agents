@@ -18,7 +18,8 @@ an oversight: Google's naming scheme doesn't offer a dated alternative.
 One source flagged the 2.5 family for an Oct 16 2026 retirement window --
 re-verify before real use if this file is more than a few weeks old.
 Re-verify before relying on these for a real spend decision if this file is
-more than a few weeks old, per SPEC.md R7 (model version pinning).
+more than a few weeks old (R7 in CONTRIBUTING.md's hard rules: model version
+pinning).
 
 All prices are USD per 1,000,000 tokens.
 """

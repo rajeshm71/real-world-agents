@@ -19,10 +19,10 @@ uv run pytest
 
 ## Checklist (new agent PRs)
 
-- [ ] Solves a real-world use case, not a toy demo (SPEC.md R1)
-- [ ] Demonstrates a technique not already covered by another agent (SPEC.md R3)
-- [ ] Agent's own code stays under ~500 LOC excluding UI (SPEC.md R2)
-- [ ] README passes `python scripts/lint_agents.py` (all 8 required §8.1 sections)
+- [ ] Solves a real-world use case, not a toy demo (see CONTRIBUTING.md R1)
+- [ ] Demonstrates a technique not already covered by another agent (R3)
+- [ ] Agent's own code stays under ~500 LOC excluding UI (R2)
+- [ ] README passes `python scripts/lint_agents.py` (all 8 required sections, see CONTRIBUTING.md)
 - [ ] "Code walkthrough" section points at where the 3 real-error-handling cases live (R5)
 - [ ] "Where this fails" has specific, honest examples — not generic warnings (R10)
 - [ ] At least one smoke test runs under `LLM_PROVIDER=mock`
