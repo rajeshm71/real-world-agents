@@ -56,3 +56,10 @@ ignore = ["BLE001"]
 
 [tool.pytest.ini_options]
 testpaths = ["common/tests", "agents", "tests"]
+# Sibling agents/*/tests/ dirs each carry their own __init__.py (scaffolded
+# by scripts/new_agent.py). Under pytest's default rootdir-based import
+# mode, that makes them all resolve to the same top-level `tests` package
+# and collide on the second one collected. `importlib` mode uses the file
+# path as the identity instead, so each agent's tests keep their own
+# namespace. Landed at F2.1 when agent #02 first hit the collision.
+addopts = "--import-mode=importlib"
