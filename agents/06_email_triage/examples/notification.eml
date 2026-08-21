@@ -1,0 +1,20 @@
+From: GitHub <noreply@github.example.com>
+To: me@example.com
+Date: Mon, 18 Aug 2026 14:33:22 +0000
+Subject: [rajeshm71/real-world-agents] PR #7 opened by contributor42
+Message-ID: <notif.pr7.20260818@github.example.com>
+
+A new pull request has been opened in your repository.
+
+Repository: rajeshm71/real-world-agents
+PR: #7 -- Add support for Anthropic provider in agent #06
+Author: contributor42
+Files changed: 3
+Additions: 47
+Deletions: 12
+
+Description:
+Adds a one-line swap path for Anthropic Claude models in the email-triage agent, per the README's provider-swap documentation. Adds one test verifying the model string is passed through correctly.
+
+Review: https://github.example.com/rajeshm71/real-world-agents/pull/7
+Unsubscribe from these notifications: https://github.example.com/notifications
