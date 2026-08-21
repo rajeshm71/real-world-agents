@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**3 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), and #03 (CSV chat) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**4 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), and #04 (meeting notes) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
@@ -17,6 +17,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 01 | [Receipt / invoice extractor](agents/01_receipt_extractor/) | Structured extraction with vision | Instructor + OpenAI/Anthropic/Gemini | N/A | SMB expense tracking |
 | 02 | [Contract reviewer](agents/02_contract_reviewer/) | Long-context single-pass + hand-rolled JSON-validate-retry (no framework) | `common/llm.py` multi-provider (OpenAI default, Anthropic/Gemini switchable) | N/A | Legal-review triage for freelancers / small businesses |
 | 03 | [CSV chat](agents/03_csv_chat/) | Text-to-SQL with a LangGraph state machine + retry-on-error loop | LangGraph + `common/llm.py` multi-provider | N/A | Non-technical users querying spreadsheet data in plain English |
+| 04 | [Meeting notes → action items](agents/04_meeting_notes/) | ReAct pattern with grounded tools (extract_speakers, extract_dates, score_urgency, verify_excerpt) | OpenAI Agents SDK (OpenAI in v1; LiteLLM swap for Claude/Gemini documented) | N/A | Post-meeting follow-through — structured owner/priority/deadline per item |
 
 ## Roadmap
 
@@ -24,7 +25,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
-| 04 | Meeting notes → action items | ReAct pattern for extraction + prioritization | OpenAI Agents SDK | Meeting follow-through |
 | 05 | Multi-agent research assistant | Multi-agent collaboration (researcher + writer + editor) | CrewAI | Deep-dive research on a topic |
 | 06 | Type-safe email triage | Type-safe agent with structured tool calls | PydanticAI | Inbox categorization on sample .eml files |
 | 07 | Prompt optimizer over an eval set | Meta-optimization (learn prompts from examples) | DSPy | Improve any agent's prompt automatically |

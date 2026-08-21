@@ -1,0 +1,33 @@
+[project]
+name = "meeting-notes"
+version = "0.1.0"
+description = "Meeting notes -> structured action items. Demonstrates the ReAct pattern (interleaved reasoning + tool calls) via the OpenAI Agents SDK. Agent #04 of real-world-agents."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm.resolve_model + common.pricing.cost_usd
+    # OpenAI Agents SDK: the whole point of this agent. Verified 0.22.0 on
+    # PyPI 2026-08-21. Provider-agnostic via LiteLLM (documented as a
+    # one-line swap in the README; not shipped in v1 to keep deps tight).
+    "openai-agents>=0.22",
+    # OpenAI SDK: openai-agents transitively depends on it, but list
+    # explicitly for the reader's benefit and pin discipline.
+    "openai>=1.50",
+    # dateutil: powers the extract_dates() tool. Standard, small.
+    "python-dateutil>=2.9",
+    "pydantic>=2.5",
+    "gradio>=4.44",  # UI; optional at CLI time.
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
