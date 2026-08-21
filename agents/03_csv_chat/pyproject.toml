@@ -1,0 +1,39 @@
+[project]
+name = "csv-chat"
+version = "0.1.0"
+description = "Ask a CSV questions in plain English -- get plain-English answers backed by real SQL. Demonstrates a LangGraph state machine with text-to-SQL + retry-on-error. Agent #03 of real-world-agents."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm.get_llm + common.pricing.cost_usd
+    # LangGraph is the whole point of this agent -- state machine for the
+    # text-to-SQL workflow (introspect -> generate -> execute -> format,
+    # with a conditional retry edge on SQL error). Verified 1.2.10 on
+    # PyPI 2026-08-21, stable 1.x API.
+    "langgraph>=1.0",
+    # pandas: de-facto standard for CSV in Python; used for read_csv +
+    # to_sql onto in-memory SQLite (stdlib sqlite3). ~50MB with numpy
+    # transitively, but any user of a "chat with your CSV" tool already
+    # thinks in pandas semantics (NaN, dtypes, .to_sql()).
+    "pandas>=2.0",
+    # Multi-provider by default (SPEC R6): all three SDKs listed
+    # explicitly; resolved lazily inside common.llm.get_llm().
+    "openai>=1.50",
+    "anthropic>=0.121",
+    "google-genai>=1.0",
+    "pydantic>=2.5",
+    "gradio>=4.44",  # UI; optional at CLI time.
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
