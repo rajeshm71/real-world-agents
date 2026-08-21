@@ -1,0 +1,38 @@
+[project]
+name = "research-crew"
+version = "0.1.0"
+description = "Multi-agent research assistant -- researcher + writer + editor collaborate to turn a topic into a structured brief. Demonstrates multi-agent collaboration via a CrewAI Sequential Process. Agent #05 of real-world-agents."
+# CrewAI 1.15.x (verified 2026-08-21) supports Python 3.10 through 3.13.
+# Newer Python (3.14+) has no crewai wheels yet -- pin the ceiling so
+# `uv sync` guides users to a working interpreter instead of failing
+# with a cryptic "no matching distribution" error.
+requires-python = ">=3.10,<3.14"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm.resolve_model + common.pricing.cost_usd
+    # CrewAI is the whole point of this agent -- multi-agent Sequential
+    # Process (researcher -> writer -> editor). Verified 1.15.17 on PyPI
+    # 2026-08-21 with `uv pip check` reporting zero conflicts across all
+    # 146 transitive packages.
+    "crewai>=1.15,<2.0",
+    "crewai-tools>=1.15,<2.0",
+    # CrewAI uses LiteLLM under the hood (transitive), so multi-provider
+    # comes for free. openai listed explicitly for the reader's benefit
+    # and pin discipline (default provider).
+    "openai>=1.50",
+    "pydantic>=2.5",
+    "gradio>=4.44",  # UI; optional at CLI time.
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
