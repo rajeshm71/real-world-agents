@@ -9,9 +9,12 @@ PydanticAI Agent is fully typed:
     #     injected     structured output
     #     dependencies (validated Pydantic)
 
-Tools registered via `@agent.tool` receive `RunContext[TriageDeps]`
-as their first argument -- typed access to user context
-(known_contacts, important_domains) that lets the model ground its
+Tools that need typed access to injected deps use `@agent.tool` with
+`RunContext[TriageDeps]` as their first argument (is_known_contact,
+is_important_domain). Tools that don't need deps use `@agent.tool_plain`
+(extract_dates, verify_snippet) -- PydanticAI's idiomatic decorator
+for context-less tools. Either way, typed access to user context
+(known_contacts, important_domains) lets the model ground its
 decisions in real user state rather than fabrications. If a tool
 signature drifts, mypy/pyright catches it before runtime; if the
 Deps or Output types change, every tool call site knows.
@@ -70,6 +73,19 @@ except ImportError:
 
 from common.llm import resolve_model
 
+# Review fix (F6.5 review): under `from __future__ import annotations`
+# above, PydanticAI evaluates tool function type annotations via the
+# module's `__globals__`, not the local scope of `_build_agent`.
+# `RunContext[TriageDeps]` on the is_known_contact / is_important_domain
+# tools would raise `NameError: RunContext is not defined` at agent
+# run time otherwise. Import stays at module level even though the
+# only user is inside _build_agent -- the annotation resolution needs
+# it visible here.
+try:  # pragma: no cover -- optional import; only fails if pydantic-ai isn't installed
+    from pydantic_ai import RunContext
+except ImportError:
+    pass
+
 # --- Provider + constants --------------------------------------------------
 
 SUPPORTED_PROVIDERS = ("openai",)
@@ -88,11 +104,17 @@ def resolve_provider() -> str:
     provider strings is a one-line swap documented in the README."""
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider != "mock" and provider not in SUPPORTED_PROVIDERS:
+        # Review fix M1 (F6.5 review): earlier wording said "swap the
+        # `llm=` param" -- copy-paste from #05 (CrewAI uses llm=).
+        # PydanticAI takes the model string as the first positional
+        # arg on Agent(), not a kwarg -- so users searching for
+        # `llm=` would find nothing. Corrected pointer below.
         raise ValueError(
             f"Unknown LLM_PROVIDER: {provider!r}. "
             f"Expected 'mock' or one of {SUPPORTED_PROVIDERS}. "
             "PydanticAI supports Anthropic/Gemini via its native provider "
-            "strings -- swap the `llm=` param on the Agent (see README)."
+            "strings -- swap the model string (`openai:...` -> "
+            "`anthropic:...` or `gemini:...`) in _build_agent (see README)."
         )
     return provider
 
@@ -372,7 +394,7 @@ def _build_agent(*, model: str):
 
     Lazy import: pydantic-ai has a heavy import graph we don't want
     in mock-mode tests."""
-    from pydantic_ai import Agent, RunContext
+    from pydantic_ai import Agent
 
     agent = Agent(
         f"openai:{model}",
@@ -395,22 +417,24 @@ def _build_agent(*, model: str):
         important domains (case-insensitive suffix match)."""
         return _is_important_domain_impl(email_address, ctx.deps)
 
-    @agent.tool
-    def extract_dates(ctx: RunContext[TriageDeps], body: str) -> list[str]:
+    # Review fix M2 (F6.5 review): extract_dates + verify_snippet
+    # don't use RunContext, so `@agent.tool_plain` is the idiomatic
+    # PydanticAI decorator (documented for context-less tools).
+    # Was `@agent.tool` with `_ = ctx` linter-quiet lines -- worked
+    # but drifted from framework convention.
+    @agent.tool_plain
+    def extract_dates(body: str) -> list[str]:
         """Extract date/deadline phrases from the body. Use to ground
         priority + action decisions (e.g. 'by Friday' -> respond_now
-        if today is Thursday). Deps param unused but present for
-        signature consistency with other tools."""
-        _ = ctx  # deps not needed
+        if today is Thursday)."""
         return _extract_dates_from(body)
 
-    @agent.tool
-    def verify_snippet(ctx: RunContext[TriageDeps], excerpt: str, body: str) -> bool:
+    @agent.tool_plain
+    def verify_snippet(excerpt: str, body: str) -> bool:
         """Return True iff `excerpt` is a verbatim (whitespace-
         normalized) substring of `body`. Call BEFORE finalizing
         the EmailTriage's key_snippet field -- prevents paraphrased
         excerpts that break the user's 'locate the evidence' workflow."""
-        _ = ctx  # deps not needed
         return _verify_snippet(excerpt, body)
 
     return agent

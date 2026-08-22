@@ -292,6 +292,37 @@ def test_agent_with_test_model_returns_valid_triage():
     assert isinstance(result.output, EmailTriage)
 
 
+def test_l1_triage_email_end_to_end_via_build_agent_and_test_model(monkeypatch):
+    """Review fix L1 (F6.5 review): the previous test above builds
+    a fresh Agent bypassing _build_agent entirely. This test
+    exercises the REAL _build_agent + real triage_email code path
+    with a TestModel model override, closing the coverage gap.
+
+    Uses Agent.override(model=TestModel()) context manager so the
+    fake API key gets past _build_agent construction and TestModel
+    handles the actual run_sync call."""
+    pytest.importorskip("pydantic_ai")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-for-l1-test")
+    from pydantic_ai.models.test import TestModel
+
+    real_agent = _build_agent(model="gpt-4.1-mini-2025-04-14")
+    # Real .eml with enough body content to pass the R5 case 2 gate.
+    eml = _SAMPLE_EML
+    with real_agent.override(model=TestModel()):
+        result = triage_email(
+            eml,
+            deps=TriageDeps(known_contacts=["sarah@example.com"]),
+            _agent=real_agent,
+        )
+    # TestModel produces fake-but-schema-valid data; verify the
+    # full round-trip lands a real EmailTriage.
+    assert isinstance(result, EmailTriage)
+    # Cross-field validator ran (respond-action-consistency).
+    if result.action not in ("respond_now", "respond_later"):
+        assert result.suggested_reply is None
+
+
 # --- 7. resolve_provider ---------------------------------------------------
 
 
