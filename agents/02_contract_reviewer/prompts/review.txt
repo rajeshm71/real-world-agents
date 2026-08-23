@@ -27,7 +27,7 @@ Follow this reasoning order:
 
    - `page_number`: the page number the excerpt appears on. The CONTRACT TEXT below is prefixed with `--- PAGE N ---` markers between pages; use the N of the marker immediately preceding the excerpt. Omit `page_number` (or use null) only if the CONTRACT TEXT has NO `--- PAGE N ---` markers at all (plain-text input).
 
-   - `explanation`: plain English for a non-lawyer, 2-4 sentences. Explain what the clause actually MEANS for the reader in practical terms ("this means you can't work for any of their competitors for 2 years after leaving") — not what the clause says legally. Do not use legal jargon.
+   - `explanation`: plain English for a non-lawyer, 2-4 sentences. Explain what the clause actually MEANS for the reader in practical terms ("this means you can't work for any of their competitors for 2 years after leaving"), not what the clause says legally. Do not use legal jargon.
 
    - `recommendation` (optional): if there's an obvious counter-move the reader could push for before signing (e.g. "ask for a cap at contract value" or "ask for mutual, not one-way"), include it. Omit if no obvious counter applies.
 
