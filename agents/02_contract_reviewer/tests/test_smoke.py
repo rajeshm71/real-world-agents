@@ -1,8 +1,8 @@
 """Smoke tests for the contract reviewer agent.
 
 All tests run under LLM_PROVIDER=mock (R8 in CONTRIBUTING.md) -- CI never
-touches a real API key. Real-provider tests are a manual maintainer
-check before shipping (see tasks/todo.md).
+touches a real API key. Real-provider tests are a manual maintainer check
+before shipping.
 
 Covers, in order below:
 
@@ -111,8 +111,9 @@ class SequenceLLM:
 @pytest.fixture(autouse=True)
 def _zero_backoff(monkeypatch):
     """Skip the real 1s+2s sleep during retry tests -- otherwise this file
-    would take ~10s per multi-retry test (review fix S3 makes the sleep
-    conditional; this monkeypatch makes it free)."""
+    would take ~10s per multi-retry test. The sleep in agent.py is
+    conditional on another attempt being scheduled; this monkeypatch just
+    makes each of those sleeps free."""
     monkeypatch.setattr(_agent, "RETRY_BACKOFF_SECONDS", 0.0)
 
 
@@ -384,10 +385,10 @@ def test_translate_api_error_auth_by_class_name():
 
 
 def test_translate_api_error_class_check_priority():
-    """[S5 review fix]: class-name check must fire BEFORE message-string
-    fallback. A ValueError whose message contains 'rate limit' should
-    NOT be classified as a rate-limit error unless it also matches by
-    class or status."""
+    """Class-name check must fire BEFORE message-string fallback. A
+    ValueError whose message contains 'rate limit' should NOT be
+    classified as a rate-limit error unless it also matches by class
+    or status."""
 
     # A generic ValueError with rate-limit words in the message DOES
     # fall through to the message-string fallback (case 5 in the priority

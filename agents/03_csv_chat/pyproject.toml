@@ -16,8 +16,8 @@ dependencies = [
     # transitively, but any user of a "chat with your CSV" tool already
     # thinks in pandas semantics (NaN, dtypes, .to_sql()).
     "pandas>=2.0",
-    # Multi-provider by default (SPEC R6): all three SDKs listed
-    # explicitly; resolved lazily inside common.llm.get_llm().
+    # Multi-provider by default (no single provider hardcoded): all three SDKs
+    # listed explicitly; resolved lazily inside common.llm.get_llm().
     "openai>=1.50",
     "anthropic>=0.121",
     "google-genai>=1.0",

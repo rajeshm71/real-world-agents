@@ -105,11 +105,10 @@ def test_r5_case1_short_topic_rejected(monkeypatch):
 
 
 def test_r5_case1_trivial_topic_rejected(monkeypatch):
-    """Trivial-input regex OR length rule triggers rejection. Review
-    fix L1 (F5.5 review): removed a leftover pass-only for-loop from
-    an earlier draft. This test asserts explicitly on 'asdf' (length
-    rule fires) -- separate case-coverage tests below check the
-    regex + length branches independently via _looks_like_valid_topic."""
+    """Trivial-input regex OR length rule triggers rejection. This
+    test asserts explicitly on 'asdf' (length rule fires); separate
+    case-coverage tests below check the regex + length branches
+    independently via _looks_like_valid_topic."""
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     with pytest.raises(ResearchError, match="doesn't look like a real"):
         run_research("asdf")
@@ -271,33 +270,29 @@ def test_normalize_ws_collapses():
     assert _normalize_ws("  padded  ") == "padded"
 
 
-# --- Review-fix regression guards (M1 empty-excerpt, M3 word_count) --------
+# --- Regression guards (M1 empty-excerpt, M3 word_count) ------------------
 
 
 def test_m1_verify_rejects_empty_excerpt():
-    """Review fix M1: `"" in "anything"` is True in Python. Without
-    the explicit guard, an empty excerpt would silently verify
-    against any non-empty source. Regression guard against a future
-    refactor that drops the `if not excerpt.strip()` check."""
+    """`"" in "anything"` is True in Python. Without the explicit
+    guard, an empty excerpt would silently verify against any non-empty
+    source. Regression guard against a future refactor that drops the
+    `if not excerpt.strip()` check."""
     assert _verify_source_citation("", "Quantum computers exist.") is False
     assert _verify_source_citation("   ", "Quantum computers exist.") is False
     assert _verify_source_citation("\n\t", "Quantum computers exist.") is False
 
 
 def test_h2_generic_crew_exception_lands_in_translator(monkeypatch):
-    """Review fix H2 (F5.5 third-pass): previously the code did
-    `from crewai.utilities.exceptions import CrewException` and
-    caught it specifically -- but that class doesn't exist in
-    crewai 1.15.17. The import would fail as ImportError and my
-    handler would misdiagnose it as 'crewai not installed' for
-    real users.
-
-    Fix: removed the specialized catch; any exception raised by
-    crew.kickoff() (crewai-internal or otherwise) now goes through
-    the generic `except Exception` -> `_translate_api_error` path.
-    This test injects a fake exception via crew.kickoff and
-    verifies it lands in the translator's generic branch, not
-    the missing-install path."""
+    """A `from crewai.utilities.exceptions import CrewException`
+    specialized catch would fail as ImportError (the class doesn't
+    exist in crewai 1.15.17) and the handler would misdiagnose it as
+    'crewai not installed' for real users. Any exception raised by
+    crew.kickoff() (crewai-internal or otherwise) goes through the
+    generic `except Exception` -> `_translate_api_error` path. This
+    test injects a fake exception via crew.kickoff and verifies it
+    lands in the translator's generic branch, not the missing-install
+    path."""
     pytest.importorskip("crewai")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
@@ -320,11 +315,11 @@ def test_h2_generic_crew_exception_lands_in_translator(monkeypatch):
 
 
 def test_m3_mock_word_count_matches_actual_content(monkeypatch):
-    """Review fix M3: mock's `word_count` field is now computed from
-    actual background + key_findings + implications content, not
-    hardcoded to a plausible-looking number. Regression guard
-    against a future refactor that reverts to hardcoded word_count
-    (which would silently drift as content changes)."""
+    """Mock's `word_count` field is computed from actual background +
+    key_findings + implications content, not hardcoded to a plausible-
+    looking number. Regression guard against a future refactor that
+    reverts to hardcoded word_count (which would silently drift as
+    content changes)."""
     monkeypatch.setenv("LLM_PROVIDER", "mock")
     brief = run_research("Sample topic for word-count check")
     # Recompute what the validator SHOULD have computed.

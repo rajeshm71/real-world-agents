@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "real-world-agents",  # for common.llm.get_llm + common.pricing.cost_usd
-    # Multi-provider by default (SPEC R6). All three SDKs listed explicitly so
+    # Multi-provider by default (no single provider hardcoded). All three SDKs listed explicitly so
     # a reader of this file alone sees the full picture of what agent #02 can
     # reach. openai/anthropic/google-genai are also root workspace deps
     # (transitively resolved via real-world-agents above).

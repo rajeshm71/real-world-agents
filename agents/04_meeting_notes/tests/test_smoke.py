@@ -449,12 +449,12 @@ def test_resolve_provider_rejects_garbage(monkeypatch):
         resolve_provider()
 
 
-# --- 8. Review-fix regression guards (H1: cross-field owner validation) ----
+# --- 8. Cross-field owner validation (owner must be in participants) ----
 
 
 def test_h1_owner_in_participants_passes_through():
-    """Review fix H1: an ActionItem whose owner appears in
-    MeetingSummary.participants passes validation unchanged."""
+    """An ActionItem whose owner appears in MeetingSummary.participants
+    passes validation unchanged."""
     summary = MeetingSummary(
         participants=["Alice", "Bob"],
         action_items=[
@@ -471,11 +471,11 @@ def test_h1_owner_in_participants_passes_through():
 
 
 def test_h1_owner_not_in_participants_gets_nulled():
-    """Review fix H1: an ActionItem whose owner is NOT in participants
-    gets auto-nulled by the @model_validator (option b: forgiving).
-    Guards against the model returning owner="Zack" when participants
-    only has ["Alice", "Bob"] -- the mostly-good extraction still
-    returns something useful, just with the bogus owner cleared."""
+    """An ActionItem whose owner is NOT in participants gets auto-nulled
+    by the @model_validator (forgiving option). Guards against the model
+    returning owner="Zack" when participants only has ["Alice", "Bob"]:
+    the mostly-good extraction still returns something useful, just with
+    the bogus owner cleared."""
     summary = MeetingSummary(
         participants=["Alice", "Bob"],
         action_items=[

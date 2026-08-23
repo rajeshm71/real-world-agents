@@ -96,9 +96,9 @@ DEFAULT_MAX_ITER = 15  # per-agent max iterations before CrewAI stops
 MIN_TOPIC_CHARS = 10
 # Trivial-input regex: anything that matches this at the topic level
 # fails the R5 case 1 gate. Small dictionary of common non-topics.
-# Review fix L2 (F5.5 third-pass): dropped `\s*` alternate --
-# _looks_like_valid_topic checks len(topic.strip()) < MIN_TOPIC_CHARS
-# first, which catches empty/whitespace-only before this regex runs.
+# No `\s*` alternate needed: _looks_like_valid_topic checks
+# len(topic.strip()) < MIN_TOPIC_CHARS first, which catches
+# empty/whitespace-only before this regex runs.
 _TRIVIAL_TOPIC_RE = re.compile(
     r"^(test|hello|hi|hey|asdf|qwerty|foo|bar|baz)$",
     re.IGNORECASE,
@@ -134,12 +134,8 @@ def _load_prompt(name: str) -> str:
 class ResearchAttempt:
     """Partial state from a failed research run -- attached to
     ResearchError so the UI can surface what the crew tried before
-    giving up.
-
-    Review fix L1 (F5.5 third-pass): removed unused `context: dict`
-    field that no raise-site populated. If a future stage needs to
-    attach richer context, add a specific typed field for it rather
-    than an untyped bag."""
+    giving up. If a future stage needs to attach richer context, add a
+    specific typed field for it rather than an untyped bag."""
 
     topic: str = ""
     stage: str = ""  # 'search' / 'writing' / 'editing'
@@ -251,10 +247,10 @@ def _verify_source_citation(excerpt: str, sources_content: str) -> bool:
     a verbatim (whitespace-normalized) substring of the concatenated
     source snippets.
 
-    Review fix M1 (F5.5 review): explicit empty-excerpt guard. In
-    Python, `"" in "anything"` is True, so without this guard a
-    downstream bug producing an empty excerpt would silently pass
-    verification. Empty is never a valid citation -- reject it.
+    Explicit empty-excerpt guard: in Python, `"" in "anything"` is True,
+    so without this a downstream bug producing an empty excerpt would
+    silently pass verification. Empty is never a valid citation, reject
+    it.
     """
     if not excerpt.strip():
         return False
@@ -322,16 +318,14 @@ def run_research(
     # mode + R5 case 1 + the search preflight above must NOT require
     # it installed.
     #
-    # Review fix H2 (F5.5 third-pass review): previously imported
-    # `crewai.utilities.exceptions.CrewException` here and caught it
-    # specifically. Verified against crewai 1.15.17: no such class
-    # exists at that path (the module only contains a
+    # No specialized CrewException catch here: verified against
+    # crewai 1.15.17, `crewai.utilities.exceptions.CrewException` does
+    # not exist at that path (the module only contains a
     # `context_window_exceeding_exception` submodule with
-    # LLMContextLengthExceededError). The specialized catch was
-    # redundant with the generic `except Exception` below anyway --
-    # both routed to _translate_api_error. Now just verifies crewai
-    # is importable and lets the generic handler translate whatever
-    # kickoff() raises.
+    # LLMContextLengthExceededError). A specialized catch would just be
+    # redundant with the generic `except Exception` below. Verify
+    # crewai is importable, then let the generic handler translate
+    # whatever kickoff() raises.
     try:
         import crewai  # noqa: F401 -- availability check only
     except ImportError as exc:
@@ -576,13 +570,11 @@ def _mock_result(topic: str) -> ResearchBrief:
     Character count of the topic is encoded into the summary so a
     future refactor that makes mock constant surfaces at test time.
     """
-    # Review fix M3 (F5.5 review): mock's content is now padded to
-    # ACTUALLY reach WORD_COUNT_MIN (300 words across background +
-    # key_findings + implications), and word_count is computed from
-    # that content rather than hardcoded. Previously the mock set
-    # word_count=400 with only ~110 words of real content -- schema
-    # range-check passed but the number was a lie any downstream
-    # length-filter would trust.
+    # Mock's content is padded to ACTUALLY reach WORD_COUNT_MIN (300
+    # words across background + key_findings + implications), and
+    # word_count is computed from that content rather than hardcoded --
+    # so a downstream length-filter that trusts word_count sees the
+    # honest number.
     background = (
         "This is a mock research brief. In a real run, the researcher "
         "agent would gather 3-5 sources on this topic using the "

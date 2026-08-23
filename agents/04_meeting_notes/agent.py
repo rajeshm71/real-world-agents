@@ -465,10 +465,7 @@ def _mock_result(notes: str) -> MeetingSummary:
 
     Uses a fake action item whose context_excerpt is embedded into the
     summary string -- keeps the mock schema-valid without needing
-    verify_excerpt to actually pass against real notes.
-
-    Review fix L1 (F4.5 review): ActionItem is now imported at module
-    top with MeetingSummary rather than lazy-imported here."""
+    verify_excerpt to actually pass against real notes."""
     return MeetingSummary(
         meeting_topic="Mock meeting",
         participants=["Alice", "Bob"],

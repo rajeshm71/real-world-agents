@@ -92,13 +92,12 @@ class MeetingSummary(BaseModel):
 
     @model_validator(mode="after")
     def _null_out_unknown_owners(self) -> MeetingSummary:
-        """Review fix H1 (F4.5 review): the system prompt tells the
-        model to only use owners that appear in `participants`, but
-        the SDK's structured-output validation can't enforce that at
-        the field level. Auto-null any owner that isn't in the
-        participants list rather than raising -- forgiving option
-        (option b in the review) so a mostly-good extraction still
-        returns something useful, just with the bogus owner cleared.
+        """The system prompt tells the model to only use owners that
+        appear in `participants`, but the SDK's structured-output
+        validation can't enforce that at the field level. Auto-null any
+        owner that isn't in the participants list rather than raising --
+        forgiving option so a mostly-good extraction still returns
+        something useful, just with the bogus owner cleared.
 
         Same [C5] cross-field-invariant pattern as agents #02 (excerpt-
         in-source) and #03 (execute-then-verify) -- the schema enforces

@@ -30,9 +30,9 @@ concrete failure modes handled explicitly (see review_contract below):
      the model's cap named, not a silent truncation
   3. Rate limit / API failure -> translated to ContractReviewError
      with a clear "temporarily rate-limited" message. This agent does
-     NOT auto-retry transient API errors (review decision S2 option-b,
-     F2.2 review): the user pays per real API call, and is better-
-     placed to decide whether to wait and re-run than to have the loop
+     NOT auto-retry transient API errors: the user pays per real API
+     call, and is better-placed to decide whether to wait and re-run
+     than to have the loop
      silently spend more of their budget on a failing endpoint. The
      retry loop only re-prompts for VALIDATION failures (bad JSON,
      schema mismatch, paraphrased excerpts) -- those cost the same
@@ -48,10 +48,10 @@ is MORE educational than "just use Instructor" here: the loop can
 enforce a cross-field invariant (excerpt-in-source) that a per-field
 Pydantic validator can't reach.
 
-Provider + model are fully user-configurable (SPEC R6): every real
-LLM call goes through `common.llm.get_llm()` / `resolve_model()`, so
-the LLM_PROVIDER env var and per-provider _DEFAULT_MODEL overrides
-work exactly as they do for agent #01, unchanged.
+Provider + model are fully user-configurable: every real LLM call goes
+through `common.llm.get_llm()` / `resolve_model()`, so the LLM_PROVIDER
+env var and per-provider _DEFAULT_MODEL overrides work exactly as they
+do for agent #01, unchanged.
 """
 
 from __future__ import annotations
@@ -124,9 +124,9 @@ def _load_prompt_template() -> str:
 
 
 def resolve_provider() -> str:
-    """LLM_PROVIDER env var, defaulting to "openai" (SPEC R6: no provider
-    is hardcoded, every provider is equally supported). "mock" is
-    handled by the caller (review_contract), not here."""
+    """LLM_PROVIDER env var, defaulting to "openai". No provider is
+    hardcoded; every provider is equally supported. "mock" is handled by
+    the caller (review_contract), not here."""
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider != "mock" and provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
@@ -265,9 +265,8 @@ def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
     them). Lazy import so mock-mode tests don't require pypdf installed.
 
     Raises ContractReviewError with an actionable message if pypdf isn't
-    installed (review fix S7, F2.2 review) rather than letting the
-    outer generic ImportError bubble up and get misclassified by
-    _translate_api_error().
+    installed, rather than letting the outer generic ImportError bubble up
+    and get misclassified by _translate_api_error().
     """
     import io
 
@@ -360,8 +359,8 @@ def _run_review_loop(
         if isinstance(parsed, str):  # error message
             last_errors = [parsed]
             retry_feedback = f"Your previous response was not valid JSON: {parsed}"
-            # Sleep ONLY if another attempt will happen -- the last-iteration
-            # sleep-then-raise was wasted delay (review fix S3, F2.2 review).
+            # Sleep ONLY if another attempt will happen; sleeping before the
+            # final raise would just be wasted delay.
             if attempt < max_retries:
                 _sleep_backoff(attempt)
             continue
@@ -499,8 +498,7 @@ def _translate_api_error(exc: Exception) -> ContractReviewError:
 
     Priority order (exception CLASS is checked before message strings,
     mirroring agent #01's split structure so a reader sees the priority
-    in the code shape, not just in the docstring -- review fix S5,
-    F2.2 review):
+    in the code shape, not just in the docstring):
       1. Rate-limit by class name -> rate-limit case
       2. Auth by class name -> auth case
       3. Status code 429 -> rate-limit case
@@ -539,11 +537,10 @@ def _translate_api_error(exc: Exception) -> ContractReviewError:
 
 def _rate_limit_error() -> ContractReviewError:
     """Shared message so the six code paths that reach this case can't
-    drift apart. NOTE: this agent does NOT auto-retry rate-limit errors
-    (review decision S2 option-b, F2.2 review) -- the user is billed
-    per real API call and is best-placed to decide whether to wait and
-    re-run, rather than have the loop silently spend more of their
-    budget."""
+    drift apart. NOTE: this agent does NOT auto-retry rate-limit errors:
+    the user is billed per real API call and is best-placed to decide
+    whether to wait and re-run, rather than have the loop silently spend
+    more of their budget."""
     return ContractReviewError(
         "The service is temporarily rate-limited or overloaded. "
         "Wait a minute and try again."

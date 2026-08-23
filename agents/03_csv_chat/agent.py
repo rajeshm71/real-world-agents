@@ -46,9 +46,9 @@ error (cheaper than re-generating the whole answer), (b) letting the
 format_answer node see real result rows as context (much better answer
 quality). Cost is honestly documented in the README.
 
-Provider + model are fully user-configurable (SPEC R6): every real LLM
-call goes through common.llm.get_llm() / resolve_model(). Same env-var
-contract as agents #01/#02.
+Provider + model are fully user-configurable: every real LLM call goes
+through common.llm.get_llm() / resolve_model(). Same env-var contract as
+agents #01/#02.
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ DEFAULT_RESULT_SAMPLE_SIZE = 10  # how many rows CsvAnswer.result_sample carries
 # CSVs comfortably and gets a friendly error above that.
 MAX_COLUMNS_FOR_SCHEMA_PREVIEW = 40
 
-# Prompt-size guard (review fix M1, F3.5 review). Mirrors agent #02's
+# Prompt-size guard. Mirrors agent #02's
 # _check_context_window: chars-per-token heuristic, no SDK dep, ceiling
 # well under gpt-4.1-mini's 1M cap so there's headroom for the prompt
 # template + generated SQL + retry-feedback text + output tokens.
@@ -102,8 +102,8 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def resolve_provider() -> str:
-    """LLM_PROVIDER env var, defaulting to "openai" (SPEC R6: no
-    provider is hardcoded)."""
+    """LLM_PROVIDER env var, defaulting to "openai". No provider is
+    hardcoded."""
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider != "mock" and provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
@@ -211,17 +211,16 @@ def chat_with_csv(
     # a generic "something failed."
     conn, schema_ddl = _load_csv_to_sqlite(csv_path)
 
-    # Review fix H1 (F3.5 review): every path from here on MUST close
-    # the SQLite connection, or it leaks per-call into process memory.
-    # In-memory DB so the leak is bounded, but a long-running UI
-    # session or repeated CLI calls would accumulate connections. The
-    # try/finally guarantees close on success, on retry-exhaustion, and
-    # on any exception from within the graph.
+    # Every path from here on MUST close the SQLite connection, or it
+    # leaks per-call into process memory. In-memory DB so the leak is
+    # bounded, but a long-running UI session or repeated CLI calls would
+    # accumulate connections. The try/finally guarantees close on success,
+    # on retry-exhaustion, and on any exception from within the graph.
     try:
-        # Review fix M1 (F3.5 review): prompt-size guard. #02 has an
-        # analogous _check_context_window; #03 needed one too because
-        # wide CSVs with long cell values can produce very large
-        # schema_ddl previews that blow smaller models' context.
+        # Prompt-size guard. #02 has an analogous _check_context_window;
+        # #03 needs one too because wide CSVs with long cell values can
+        # produce very large schema_ddl previews that blow smaller models'
+        # context.
         _check_prompt_size(schema_ddl, resolved_model)
 
         llm = _llm if _llm is not None else get_llm(resolved_provider)
@@ -334,8 +333,8 @@ def _load_csv_to_sqlite(csv_path: str | Path) -> tuple[sqlite3.Connection, str]:
 
 
 def _check_prompt_size(schema_ddl: str, model: str) -> None:
-    """Review fix M1 (F3.5 review). Raise ChatCsvError with the model
-    named if the schema preview alone (before adding the prompt
+    """Raise ChatCsvError with the model named if the schema preview
+    alone (before adding the prompt
     template + question + retry-feedback + output tokens) already
     exceeds MAX_SCHEMA_TOKENS_ESTIMATE. Uses a rough chars-per-token
     heuristic, not a native tokenizer (would tie us to one provider's
@@ -440,15 +439,15 @@ def _build_graph(*, llm: LLM, conn: sqlite3.Connection, model: str):
                 "attempts_history": history,
             }
         except Exception as exc:
-            # Review fix M3 (F3.5 review): was `except sqlite3.Error`,
-            # but non-sqlite3 exceptions (TypeError on a bad arg,
-            # MemoryError on huge results, etc.) would escape the graph
-            # and get misclassified by _translate_api_error as an API
-            # error. Broader catch treats all runtime failures in the
-            # SQL execution step as retry-worthy attempts, which is
-            # honest: the model gets a chance to fix its SQL, and
-            # non-retryable errors will re-fail identically and end at
-            # retry exhaustion with the raw exception text as evidence.
+            # Broad catch (not just sqlite3.Error) because non-sqlite3
+            # exceptions (TypeError on a bad arg, MemoryError on huge
+            # results, etc.) would otherwise escape the graph and get
+            # misclassified by _translate_api_error as an API error.
+            # Treating all runtime failures in the SQL execution step as
+            # retry-worthy is honest: the model gets a chance to fix its
+            # SQL, and non-retryable errors will re-fail identically and
+            # end at retry exhaustion with the raw exception text as
+            # evidence.
             error_msg = f"{type(exc).__name__}: {exc}"
             history.append(SqlAttempt(sql=sql, error=error_msg))
             return {

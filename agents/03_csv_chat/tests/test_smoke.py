@@ -437,9 +437,9 @@ def _spy_load_csv(real_load):
 
 
 def test_h1_conn_closed_on_success(sample_csv, monkeypatch):
-    """Review fix H1: SQLite connection MUST be closed after a
-    successful chat_with_csv. Regression guard against a future
-    refactor that removes the try/finally in chat_with_csv."""
+    """SQLite connection MUST be closed after a successful chat_with_csv.
+    Regression guard against a future refactor that removes the
+    try/finally in chat_with_csv."""
     wrapped, captured = _spy_load_csv(_load_csv_to_sqlite)
     monkeypatch.setattr(_agent, "_load_csv_to_sqlite", wrapped)
     llm = SequenceLLM([
@@ -490,10 +490,10 @@ def test_h1_conn_closed_on_llm_exception(sample_csv, monkeypatch):
 
 
 def test_m1_prompt_size_check_raises_on_oversized_schema(sample_csv, monkeypatch):
-    """Review fix M1: a schema_ddl above the token ceiling should raise
-    ChatCsvError with the model named, BEFORE any LLM call happens.
-    Simulate by forcing the ceiling low so a normal-sized schema trips
-    it -- easier than fabricating a 400KB CSV."""
+    """A schema_ddl above the token ceiling should raise ChatCsvError
+    with the model named, BEFORE any LLM call happens. Simulate by
+    forcing the ceiling low so a normal-sized schema trips it -- easier
+    than fabricating a 400KB CSV."""
     monkeypatch.setattr(_agent, "MAX_SCHEMA_TOKENS_ESTIMATE", 5)
     # llm should NEVER be called -- the size check raises first.
     llm = SequenceLLM([])  # empty; would RuntimeError on any .complete() call
@@ -540,10 +540,10 @@ class _AlwaysBadExecuteConn:
 
 
 def test_m3_non_sqlite_exception_in_execute_treated_as_attempt(sample_csv, monkeypatch):
-    """Review fix M3: if _execute_sql raises a non-sqlite3 exception
-    (TypeError, MemoryError, etc.), the graph should treat it as an
-    ATTEMPT FAILURE (retry-worthy) not let it escape and get
-    misclassified as an API error by _translate_api_error.
+    """If _execute_sql raises a non-sqlite3 exception (TypeError,
+    MemoryError, etc.), the graph should treat it as an ATTEMPT FAILURE
+    (retry-worthy) not let it escape and get misclassified as an API
+    error by _translate_api_error.
 
     Simulate via a fake connection with a always-raising .execute --
     the whole thing runs through the graph's retry loop and lands at

@@ -293,14 +293,14 @@ def test_agent_with_test_model_returns_valid_triage():
 
 
 def test_l1_triage_email_end_to_end_via_build_agent_and_test_model(monkeypatch):
-    """Review fix L1 (F6.5 review): the previous test above builds
-    a fresh Agent bypassing _build_agent entirely. This test
-    exercises the REAL _build_agent + real triage_email code path
-    with a TestModel model override, closing the coverage gap.
+    """The previous test above builds a fresh Agent bypassing
+    _build_agent entirely. This test exercises the REAL _build_agent +
+    real triage_email code path with a TestModel model override,
+    closing that coverage gap.
 
-    Uses Agent.override(model=TestModel()) context manager so the
-    fake API key gets past _build_agent construction and TestModel
-    handles the actual run_sync call."""
+    Uses Agent.override(model=TestModel()) context manager so the fake
+    API key gets past _build_agent construction and TestModel handles
+    the actual run_sync call."""
     pytest.importorskip("pydantic_ai")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-for-l1-test")
