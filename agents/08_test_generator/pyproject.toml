@@ -1,0 +1,32 @@
+[project]
+name = "test-generator"
+version = "0.1.0"
+description = "Generate a passing pytest suite for any Python module. Tool-use + iterative refinement via OpenAI Agents SDK, with a stdlib subprocess sandbox for iteration feedback. Agent #08 of real-world-agents."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm / common.pricing + workspace resolution
+    # OpenAI Agents SDK: same pin agent #04 uses (verified 0.22.0 on PyPI 2026-08-21).
+    "openai-agents>=0.22",
+    # openai listed explicitly for pin discipline; the SDK delegates.
+    "openai>=1.50",
+    "pydantic>=2.5",
+    "gradio>=4.44",
+    # pytest is the sandbox's testing runner -- not just a dev dep here; it's
+    # invoked as a subprocess against LLM-generated test code. Pinned as a
+    # runtime dep so the sandbox works out of the box.
+    "pytest>=8.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
