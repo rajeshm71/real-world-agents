@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**6 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), and #06 (email triage) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**7 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), and #07 (prompt optimizer) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
@@ -20,6 +20,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 04 | [Meeting notes → action items](agents/04_meeting_notes/) | ReAct pattern with grounded tools (extract_speakers, extract_dates, score_urgency, verify_excerpt) | OpenAI Agents SDK (OpenAI in v1; LiteLLM swap for Claude/Gemini documented) | N/A | Post-meeting follow-through: structured owner/priority/deadline per item |
 | 05 | [Research crew](agents/05_research_crew/) | Multi-agent collaboration (researcher + writer + editor) with Sequential Process + verified source citations | CrewAI (OpenAI in v1; LiteLLM swap documented) | N/A | Deep-dive research on a topic: fact-checked brief with verified sources |
 | 06 | [Type-safe email triage](agents/06_email_triage/) | Type-safe `Agent[Deps, Output]` with typed dependency injection into tools | PydanticAI (OpenAI in v1; one-line swap for Anthropic/Gemini) | N/A | Structured inbox triage grounded in your own contacts + important domains |
+| 07 | [Prompt optimizer](agents/07_prompt_optimizer/) | Meta-optimization: DSPy's GEPA learns a better prompt from an eval set | DSPy (OpenAI/Anthropic/Gemini via LiteLLM under the hood) | N/A | Auto-tune agent #01's receipt-extraction prompt against its 20-case CORD eval |
 
 ## Roadmap
 
@@ -27,7 +28,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
-| 07 | Prompt optimizer over an eval set | Meta-optimization (learn prompts from examples) | DSPy | Improve any agent's prompt automatically |
 | 08 | Python test generator | Tool use + iterative refinement | OpenAI Agents SDK + sandbox execution | Auto-generate pytest suites from source code |
 | 09 | Screenshot → HTML/CSS | Multimodal component reconstruction | Claude vision + plain Python | Design → code |
 | 10 | Policy Q&A over handbook | RAG with citations, on-prem/private | Plain Python + sqlite-vec + Anthropic | HR internal tool, privacy-preserving |

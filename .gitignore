@@ -17,6 +17,9 @@ uv.lock
 .env
 .env.local
 
+# Per-agent last-run dumps (agent-produced JSON dropped next to agent.py)
+agents/*/last_run.json
+
 # OS
 .DS_Store
 Thumbs.db

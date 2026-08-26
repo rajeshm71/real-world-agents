@@ -1,0 +1,30 @@
+[project]
+name = "prompt-optimizer"
+version = "0.1.0"
+description = "Meta-optimize agent #01's receipt-extractor prompt via DSPy's GEPA optimizer. Agent #07 of real-world-agents."
+requires-python = ">=3.11,<3.15"  # DSPy 3.3.1 upper bound
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm / common.pricing + workspace resolution
+    "dspy>=3.3",  # optimizer + Signature/Predict/Image + LM abstraction
+    # DSPy delegates to whichever backend the resolved provider needs.
+    # Listed explicitly so a reader sees the full picture, matching #02-#06.
+    "openai>=1.50",
+    "anthropic>=0.121",
+    "google-genai>=1.0",
+    "pydantic>=2.5",
+    "gradio>=4.44",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
