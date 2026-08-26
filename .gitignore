@@ -20,6 +20,10 @@ uv.lock
 # Per-agent last-run dumps (agent-produced JSON dropped next to agent.py)
 agents/*/last_run.json
 
+# Per-agent vector-store indexes (built at runtime; not source-controlled)
+agents/*/*.db
+agents/*/*.db.faiss
+
 # OS
 .DS_Store
 Thumbs.db

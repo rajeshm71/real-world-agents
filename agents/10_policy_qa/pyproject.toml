@@ -1,0 +1,42 @@
+[project]
+name = "policy-qa"
+version = "0.1.0"
+description = "Policy Q&A over a handbook. RAG with citations, on-prem/private via fastembed local embeddings + sqlite-vec (FAISS fallback) + Anthropic. Agent #10 of real-world-agents."
+requires-python = ">=3.11,<3.15"  # fastembed 0.8.x supports 3.10+; upper bound conservative
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # workspace: common.llm / common.pricing (unused here but consistent)
+    # Anthropic-only in v1 per roadmap; multi-provider is a trivial add later.
+    "anthropic>=0.121",
+    # fastembed: ONNX-based local embeddings, no torch (~50MB total footprint).
+    # Verified 0.8.0 on PyPI 2026-08-26; default model is BAAI/bge-small-en-v1.5
+    # which happens to be exactly what this agent uses.
+    "fastembed>=0.8",
+    # sqlite-vec: primary vector store. Loadable sqlite extension. Verified
+    # 0.1.9 on PyPI 2026-08-26.
+    "sqlite-vec>=0.1.9",
+    # FAISS: fallback when sqlite-vec's extension load fails (some Windows
+    # / older Python installs). ~10MB.
+    "faiss-cpu>=1.7",
+    # PDF ingestion (per-page text via pypdf).
+    "pypdf>=4.0",
+    "pydantic>=2.5",
+    "gradio>=4.44",
+    # numpy: fastembed pulls this transitively but listing explicitly since
+    # agent.py uses it directly for the ndarray -> bytes conversion for
+    # sqlite-vec's serialize_float32().
+    "numpy>=1.24",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
