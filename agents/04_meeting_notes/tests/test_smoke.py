@@ -48,7 +48,7 @@ import pytest
 from agents import Agent, MaxTurnsExceeded, Runner
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))
+sys.path.append(str(_AGENT_DIR.parent))
 
 _agent = importlib.import_module("04_meeting_notes.agent")
 _schemas = importlib.import_module("04_meeting_notes.schemas")

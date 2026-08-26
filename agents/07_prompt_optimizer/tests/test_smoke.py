@@ -26,7 +26,7 @@ import pytest
 from pydantic import ValidationError
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))
+sys.path.append(str(_AGENT_DIR.parent))
 
 _agent_pkg = importlib.import_module("07_prompt_optimizer.agent")
 _schemas_pkg = importlib.import_module("07_prompt_optimizer.schemas")

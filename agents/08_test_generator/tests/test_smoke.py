@@ -41,7 +41,7 @@ import pytest
 from pydantic import ValidationError
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))
+sys.path.append(str(_AGENT_DIR.parent))
 
 _agent_pkg = importlib.import_module("08_test_generator.agent")
 _schemas_pkg = importlib.import_module("08_test_generator.schemas")
@@ -533,3 +533,114 @@ def test_sample_module_is_parseable_python():
     assert _check_syntax_impl(src) == "OK"
     symbols = _list_public_symbols_impl(src)
     assert "TemperatureConverter" in symbols
+
+
+# ---------- 10. Post-review hardening ----------
+
+
+def test_mock_test_code_is_parseable_python(monkeypatch):
+    """The mock's test_code used to include a bogus `from ... import
+    SomeThing` for a symbol that doesn't exist. A user who copy-pasted
+    the mock output got a file that failed on import. Now the mock is
+    self-contained (no imports); this test locks that down."""
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    result = generate_tests(_SAMPLE_MODULE)
+    assert _check_syntax_impl(result.test_code) == "OK"
+    # A stronger claim: the mock should have no imports at all, since
+    # any real symbol from the target could get renamed later.
+    assert "import" not in result.test_code
+
+
+def test_generate_tests_rejects_zero_max_iterations(monkeypatch):
+    """Nonsense values must fail fast at the public API rather than
+    producing a confusing schema error deep in the call stack."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    with pytest.raises(ValueError, match="max_iterations must be >= 1"):
+        generate_tests(_SAMPLE_MODULE, max_iterations=0)
+
+
+def test_generate_tests_rejects_negative_max_iterations(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    with pytest.raises(ValueError, match="max_iterations must be >= 1"):
+        generate_tests(_SAMPLE_MODULE, max_iterations=-1)
+
+
+def test_generate_tests_rejects_non_positive_sandbox_timeout(monkeypatch):
+    """A zero or negative wall-clock timeout would either instantly
+    fail every subprocess or (worse) be silently ignored by
+    subprocess.run. Reject at the boundary."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    with pytest.raises(ValueError, match="sandbox_timeout_seconds must be > 0"):
+        generate_tests(_SAMPLE_MODULE, sandbox_timeout_seconds=0)
+
+
+def test_sanitize_env_preserves_aws_region(monkeypatch):
+    """AWS_REGION and AWS_DEFAULT_REGION are benign region hints, NOT
+    credentials. A legit boto3-using test needs them. Regression guard
+    against re-widening the AWS pattern to `AWS_` substring match."""
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAxxx")  # sensitive; must drop
+    result = _sanitize_env()
+    assert result.get("AWS_REGION") == "us-east-1"
+    assert result.get("AWS_DEFAULT_REGION") == "us-west-2"
+    assert "AWS_ACCESS_KEY_ID" not in result
+
+
+def test_sanitize_env_drops_google_and_azure_credentials(monkeypatch):
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/creds.json")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "abcdef")
+    result = _sanitize_env()
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in result
+    assert "AZURE_CLIENT_SECRET" not in result
+
+
+def test_all_passing_true_rejected_when_too_many_todo_agent_markers():
+    """Metric-hacking guard: the prompt tells the model it MAY comment
+    out failing tests with a `# TODO(agent)` marker. A model that hits
+    genuinely-broken tests could comment them all out and claim
+    all_passing=True with a hollow suite. Cap at 2 markers; above that
+    the run is a lie and the validator catches it."""
+    test_code_with_many_todos = (
+        "def test_good(): assert True\n"
+        "# TODO(agent): could not resolve after 5 iterations\n"
+        "# def test_broken_1(): assert something()\n"
+        "# TODO(agent): could not resolve after 5 iterations\n"
+        "# def test_broken_2(): assert something_else()\n"
+        "# TODO(agent): could not resolve after 5 iterations\n"
+        "# def test_broken_3(): assert third_thing()\n"
+    )
+    with pytest.raises(ValidationError, match="TODO.agent."):
+        GeneratedTest(
+            target_module="x",
+            test_code=test_code_with_many_todos,
+            tests_added=1,
+            iterations_used=5,
+            all_passing=True,
+            final_result=TestExecutionResult(
+                exit_code=0, stdout="1 passed", stderr="", timed_out=False,
+                tests_passed=1, tests_failed=0,
+            ),
+        )
+
+
+def test_all_passing_true_ok_with_at_most_two_todo_markers():
+    """One or two `# TODO(agent)` markers is the honest-partial-progress
+    case the prompt allows -- a hard error would be over-aggressive."""
+    test_code = (
+        "def test_a(): assert True\n"
+        "def test_b(): assert True\n"
+        "# TODO(agent): could not resolve edge case for negative inputs\n"
+    )
+    result = GeneratedTest(
+        target_module="x",
+        test_code=test_code,
+        tests_added=2,
+        iterations_used=3,
+        all_passing=True,
+        final_result=TestExecutionResult(
+            exit_code=0, stdout="2 passed", stderr="", timed_out=False,
+            tests_passed=2, tests_failed=0,
+        ),
+    )
+    assert result.all_passing is True

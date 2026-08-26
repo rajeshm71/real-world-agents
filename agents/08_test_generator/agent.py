@@ -92,7 +92,14 @@ _SENSITIVE_ENV_PATTERNS = (
     "SECRET",
     "PASSWORD",
     "CREDENTIAL",
-    "AWS_",  # covers AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
+    # AWS: only the actual credential vars, NOT AWS_REGION or
+    # AWS_DEFAULT_REGION (benign; a legit boto3-using test needs them).
+    "AWS_ACCESS_KEY",
+    "AWS_SECRET",
+    "AWS_SESSION",
+    # Google Cloud + Azure sensitive vars
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "AZURE_CLIENT_SECRET",
 )
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "system.txt"
@@ -177,13 +184,6 @@ def _check_syntax_impl(test_code: str) -> str:
     except SyntaxError as exc:
         return f"SyntaxError: {exc.msg} at line {exc.lineno}"
     return "OK"
-
-
-_PYTEST_SUMMARY_RE = re.compile(
-    r"(?:(?P<passed>\d+)\s+passed)?"
-    r"(?:.*?(?P<failed>\d+)\s+failed)?",
-    re.IGNORECASE,
-)
 
 
 def _parse_pytest_summary(stdout: str) -> tuple[int, int]:
@@ -328,6 +328,21 @@ def generate_tests(
         TestGeneratorError: on missing/unparseable source, missing SDK,
             or API failure during the Runner.
     """
+    # Fail-fast on nonsense values BEFORE any FS read or LLM call.
+    # `max_iterations < 1` would eventually raise a ValidationError deep
+    # inside the schema (iterations_used has ge=1) with a confusing
+    # trace; better to reject at the boundary.
+    if max_iterations < 1:
+        raise ValueError(
+            f"max_iterations must be >= 1, got {max_iterations}. "
+            "Pass 1 or higher; the default is DEFAULT_MAX_ITERATIONS."
+        )
+    if sandbox_timeout_seconds <= 0:
+        raise ValueError(
+            f"sandbox_timeout_seconds must be > 0, got {sandbox_timeout_seconds}. "
+            "The subprocess needs a positive wall-clock cap."
+        )
+
     resolved_provider = (provider or resolve_provider()).lower()
     source_path = Path(source_path)
 
@@ -555,13 +570,20 @@ def _max_turns_result(
 def _mock_generation(source_path: Path) -> GeneratedTest:
     """Deterministic canned GeneratedTest for CI + local exploration.
     No SDK import, no provider SDK, no key, no subprocess. The
-    source_path is echoed into the generated test_code so tests can
-    prove the mock saw its input (same anti-refactor guard convention
-    agent #01 uses)."""
+    source_path is echoed into the generated test_code as a comment
+    so tests can prove the mock saw its input (same anti-refactor
+    guard convention agent #01 uses).
+
+    Test code is deliberately self-contained (no imports from the
+    target module) so a reader who copy-pastes the mock's output gets
+    a file that actually parses + runs, rather than a broken import
+    against a symbol the target doesn't have. A canned mock shouldn't
+    pretend to know the target's real symbols."""
     module_name = source_path.stem or "mock_module"
     test_code = (
-        f"# [MOCK] Generated for {source_path}\n"
-        f"from {module_name} import SomeThing\n\n\n"
+        f"# [MOCK] Generated for {source_path} (module: {module_name})\n"
+        "# No real analysis happened; set LLM_PROVIDER=openai for real "
+        "generation.\n\n\n"
         "def test_mock_placeholder():\n"
         "    assert True\n"
     )

@@ -2,6 +2,14 @@
 
 Point the agent at a `.py` file. It reads the source, generates a pytest suite, runs the tests in a sandbox, reads the failures, rewrites, and repeats until everything passes (or hits the iteration cap). A deployable OSS demo for anyone who spends time hand-writing tests for small utility modules and wants to compare "what would an LLM produce for this" against their own coverage.
 
+## Verification status
+
+| Path | Status |
+|---|---|
+| Mock mode (`LLM_PROVIDER=mock`) | Fully covered by 46-test suite |
+| Sandbox subprocess helpers | Fully covered by 12 real-subprocess tests (no LLM needed) |
+| Real ReAct loop (`LLM_PROVIDER=openai` + key) | **Not yet verified against a live API call.** Structural correctness proven via #04's shipping code (same SDK surfaces), but no end-to-end run has been billed yet. Same open-item status as every other agent's first ship. |
+
 ## Technique demonstrated
 
 **ReAct-style tool use with a real code-executing sandbox as feedback.** The agent has three tools:

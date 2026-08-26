@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))
+sys.path.append(str(_AGENT_DIR.parent))
 
 _agent = importlib.import_module("06_email_triage.agent")
 _schemas = importlib.import_module("06_email_triage.schemas")

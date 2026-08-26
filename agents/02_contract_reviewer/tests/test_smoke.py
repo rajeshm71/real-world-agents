@@ -43,7 +43,7 @@ import pytest
 # for normal import syntax. Same importlib bootstrap as
 # agents/01_receipt_extractor/tests/test_smoke.py.
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))
+sys.path.append(str(_AGENT_DIR.parent))
 
 _agent = importlib.import_module("02_contract_reviewer.agent")
 _schemas = importlib.import_module("02_contract_reviewer.schemas")

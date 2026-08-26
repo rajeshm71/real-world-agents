@@ -85,7 +85,12 @@ def scaffold(short_name: str, agents_dir: Path | None = None) -> Path:
     (agent_dir / "tests").mkdir(parents=True)
     (agent_dir / "examples").mkdir(parents=True)
     (agent_dir / "__init__.py").write_text("", encoding="utf-8")
-    (agent_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
+    # NOTE: no tests/__init__.py -- with pytest's --import-mode=importlib,
+    # a tests/__init__.py inside a digit-prefixed agent dir causes every
+    # agent's `tests.test_smoke` to collide in sys.modules under the same
+    # bare-package name (pytest stops walking up at the digit-prefixed
+    # parent which isn't a valid Python identifier). Without __init__.py,
+    # pytest treats each test file individually and uniquely.
 
     (agent_dir / "README.md").write_text(
         """# TODO: <Agent title>

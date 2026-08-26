@@ -28,7 +28,7 @@ import pytest
 from pydantic import ValidationError
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_AGENT_DIR.parent))  # so `01_receipt_extractor` is importable
+sys.path.append(str(_AGENT_DIR.parent))  # so `01_receipt_extractor` is importable
 
 # Import via importlib since `01_receipt_extractor` starts with a digit
 # (invalid Python identifier) and can't be imported with normal syntax.

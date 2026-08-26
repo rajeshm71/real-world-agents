@@ -108,4 +108,19 @@ class GeneratedTest(BaseModel):
             # model saying False when the run passed is a smaller failure
             # than the reverse, and we can trust the underlying evidence.
             self.all_passing = True
+
+        # Metric-hacking guard: the prompt tells the model it MAY comment
+        # out failing tests with a `# TODO(agent)` marker rather than
+        # deleting them. A compliant model that hits genuinely-broken
+        # tests can therefore claim all_passing=True while the returned
+        # test_code is riddled with commented-out failures. Cap that at
+        # a small number of TODO markers per suite; more than that is a
+        # hollow "passing" claim and needs a reader's attention.
+        if self.all_passing and self.test_code.count("# TODO(agent)") > 2:
+            raise ValueError(
+                f"all_passing=True but test_code contains "
+                f"{self.test_code.count('# TODO(agent)')} `# TODO(agent)` "
+                "markers -- the model commented out more failing tests "
+                "than it kept passing ones. Not an honest 'passing' suite."
+            )
         return self

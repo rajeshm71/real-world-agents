@@ -81,7 +81,11 @@ def test_scaffold_creates_expected_structure(tmp_path):
     assert (result / "schemas.py").exists()
     assert (result / "prompts" / "prompt.txt").exists()
     assert (result / "tests" / "test_smoke.py").exists()
-    assert (result / "tests" / "__init__.py").exists()
+    # Regression guard: tests/__init__.py must NOT be scaffolded --
+    # it causes pytest's importlib mode to collide every agent's
+    # test_smoke.py under the same shared "tests.test_smoke" module
+    # name. See conftest.py at repo root for the full context.
+    assert not (result / "tests" / "__init__.py").exists()
     assert (result / "__init__.py").exists()
     assert (result / "examples").is_dir()
 
