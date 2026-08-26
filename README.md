@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**8 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), and #08 (test generator) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**9 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), and #09 (screenshot -> React JSX) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
@@ -22,6 +22,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 06 | [Type-safe email triage](agents/06_email_triage/) | Type-safe `Agent[Deps, Output]` with typed dependency injection into tools | PydanticAI (OpenAI in v1; one-line swap for Anthropic/Gemini) | N/A | Structured inbox triage grounded in your own contacts + important domains |
 | 07 | [Prompt optimizer](agents/07_prompt_optimizer/) | Meta-optimization: DSPy's GEPA learns a better prompt from an eval set | DSPy (OpenAI/Anthropic/Gemini via LiteLLM under the hood) | N/A | Auto-tune agent #01's receipt-extraction prompt against its 20-case CORD eval |
 | 08 | [Test generator](agents/08_test_generator/) | Tool use + iterative refinement: draft tests, run in a subprocess sandbox, read failures, rewrite | OpenAI Agents SDK + stdlib subprocess sandbox | N/A | Auto-generate pytest suites for small Python modules |
+| 09 | [Screenshot to React JSX](agents/09_screenshot_to_jsx/) | Multimodal structured extraction on a code domain (vision -> Pydantic-validated JSX) | Instructor + vision, multi-provider (Anthropic default) | N/A | First-draft React scaffolding from a design mockup or existing UI screenshot |
 
 ## Roadmap
 
@@ -29,7 +30,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
-| 09 | Screenshot → HTML/CSS | Multimodal component reconstruction | Claude vision + plain Python | Design → code |
 | 10 | Policy Q&A over handbook | RAG with citations, on-prem/private | Plain Python + sqlite-vec + Anthropic | HR internal tool, privacy-preserving |
 | 11 | Resume screener | Batch processing + ranking with rationale | PydanticAI + parallelism | HR/recruiting |
 | 12 | Interview prep agent | Adaptive Q&A generation from a JD | OpenAI Agents SDK | Job seekers |

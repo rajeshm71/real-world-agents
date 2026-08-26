@@ -1,0 +1,33 @@
+[project]
+name = "screenshot-to-jsx"
+version = "0.1.0"
+description = "Full-page screenshot -> React JSX via Instructor + vision (multi-provider). Agent #09 of real-world-agents. v0.1 is Phase A: one-shot generation; Phase B adds Playwright render + LLM-judge iteration."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm.resolve_model + common.pricing
+    # Instructor -- same pin agent #01 uses (verified 1.15.4 on PyPI 2026-08-26).
+    "instructor>=1.7",
+    # All three vision-capable providers; resolved via instructor.from_provider().
+    # Same pattern as agent #01. openai/anthropic/google-genai are also root
+    # workspace deps (transitively resolved) but listed explicitly here so a
+    # reader of this file alone sees the full picture.
+    "openai>=1.50",
+    "anthropic>=0.121",
+    "google-genai>=1.0",
+    "pydantic>=2.5",
+    "gradio>=4.44",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
