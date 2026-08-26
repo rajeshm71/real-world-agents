@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import functools
 import json
 import os
 import sys
@@ -76,6 +77,12 @@ _DEFAULT_PROVIDER = "anthropic"
 DEFAULT_STYLING: Literal["tailwind", "inline_styles"] = "tailwind"
 DEFAULT_MAX_TOKENS = 4096  # JSX + notes for a full page runs longer than a receipt
 DEFAULT_MAX_RETRIES = 3
+
+# Anthropic caps vision inputs at ~20MB per image; OpenAI + Gemini are
+# similar. Reject BEFORE base64-encoding so a caller passing a 50MB
+# screenshot gets a clear domain error rather than a cryptic
+# "content too large" surfacing from deep inside Instructor.
+MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024  # 20 MiB
 
 _VALID_MEDIA_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
 
@@ -122,7 +129,12 @@ def resolve_provider() -> str:
     return provider
 
 
+@functools.lru_cache(maxsize=1)
 def _load_prompt() -> str:
+    """Read the system prompt from disk once, cache for subsequent
+    calls. `reconstruct()` runs this on every non-mock invocation --
+    without the cache, a batch tool processing 100 screenshots reads
+    the same file 100 times."""
     return _PROMPT_PATH.read_text(encoding="utf-8")
 
 
@@ -141,40 +153,38 @@ def reconstruct(
 ) -> ReconstructedComponent:
     """Reconstruct a screenshot as a React JSX component.
 
-    Args:
-        screenshot_bytes: raw bytes of a full-page UI screenshot.
-        media_type: MIME type. Must be one of image/png, image/jpeg,
-            image/webp, image/gif. Defaults to image/png.
-        styling: "tailwind" (default) uses Tailwind utility classes;
-            "inline_styles" uses `style={{...}}` objects. Passed through
-            to the prompt.
-        provider: "anthropic" (default) / "openai" / "gemini" / "mock".
-            Falls back to LLM_PROVIDER env var.
-        model: model ID override; defaults to common.llm.resolve_model.
-        max_retries: Instructor validation-retry cap (default 3).
-        _client: test injection escape hatch; production callers leave None.
+    Args: screenshot_bytes (raw image bytes); media_type (image/png |
+    image/jpeg | image/webp | image/gif); styling ("tailwind" default
+    | "inline_styles"); provider ("anthropic" default / "openai" /
+    "gemini" / "mock"); model (override); max_retries (Instructor
+    validation-retry cap, default 3); _client (test escape hatch).
 
-    Returns:
-        A validated ReconstructedComponent with component_name, jsx_code,
-        imports, styling_approach, notes, detected_sections.
-
-    Raises:
-        ScreenshotToJsxError: on bad input, validation failure after
-            retries, or API error.
-        ValueError: on unknown provider / media_type.
-    """
-    # Fail-fast validation BEFORE any FS read or LLM call.
+    Returns a validated ReconstructedComponent. Raises
+    ScreenshotToJsxError on any user-facing failure (bad input,
+    oversized, unknown media_type/styling, retries exhausted, API
+    error) -- one exception class at the boundary so a caller wrapping
+    the call in a single `except` catches everything."""
+    # Fail-fast validation BEFORE any base64 encoding or LLM call.
+    # All four boundary checks raise the same ScreenshotToJsxError so a
+    # caller wrapping the call in a single `except` catches them all.
     if not screenshot_bytes:
         raise ScreenshotToJsxError(
             "screenshot_bytes is empty. Pass a non-zero-byte image."
         )
+    if len(screenshot_bytes) > MAX_SCREENSHOT_BYTES:
+        raise ScreenshotToJsxError(
+            f"screenshot_bytes is {len(screenshot_bytes) / 1024 / 1024:.1f} MB, "
+            f"over the {MAX_SCREENSHOT_BYTES / 1024 / 1024:.0f} MB cap. "
+            "Vision providers reject inputs above ~20 MB; downscale the "
+            "screenshot before passing it in."
+        )
     if media_type not in _VALID_MEDIA_TYPES:
-        raise ValueError(
+        raise ScreenshotToJsxError(
             f"Unknown media_type: {media_type!r}. "
             f"Expected one of {_VALID_MEDIA_TYPES}."
         )
     if styling not in ("tailwind", "inline_styles"):
-        raise ValueError(
+        raise ScreenshotToJsxError(
             f"Unknown styling: {styling!r}. "
             "Expected 'tailwind' or 'inline_styles'."
         )
@@ -260,17 +270,9 @@ def _get_real_client(provider: str, model: str):
 
 def _translate_api_error(exc: Exception) -> ScreenshotToJsxError:
     """Turn an Instructor / provider SDK exception into a user-facing
-    ScreenshotToJsxError. Six-branch priority order mirrors agents
-    #02-#08:
-      1. Class-name check: rate limit -> rate-limit case
-      2. Class-name check: auth -> auth case
-      3. Status code 429 -> rate-limit case
-      4. Status code 401 -> auth case
-      5. Message-string fallback (rate limit / overloaded, auth / key)
-      6. Generic fallback with original exception preserved
-    Plus one case-name-first check for Instructor's ValidationError
-    (retries exhausted) which gets a partial-attempt attached.
-    """
+    ScreenshotToJsxError. Priority: ValidationError first (attaches
+    partial), then the standard 6-branch (class-name -> status-code ->
+    message-string -> generic) matching agents #02-#08."""
     exc_class_name = type(exc).__name__.lower()
     message_lower = str(exc).lower()
     status = getattr(exc, "status_code", None)
@@ -341,66 +343,47 @@ def _auth_error() -> ScreenshotToJsxError:
 # --- Mock mode -------------------------------------------------------------
 
 
+_MOCK_JSX_TEMPLATES = {
+    "tailwind": (
+        'function MockLandingPage() {\n'
+        '  return (\n'
+        '    <div className="min-h-screen bg-white">\n'
+        '      <header className="p-8 bg-gray-100"><h1>Mock Landing Page</h1></header>\n'
+        '      <main className="p-8"><p>Reconstructed by mock mode. No real API call.</p></main>\n'
+        '      <footer className="p-8 bg-gray-100"><p>Footer</p></footer>\n'
+        "    </div>\n"
+        "  );\n"
+        "}\n"
+    ),
+    "inline_styles": (
+        "function MockLandingPage() {\n"
+        "  return (\n"
+        "    <div style={{minHeight: '100vh', background: '#fff'}}>\n"
+        "      <header style={{padding: '2rem', background: '#f3f4f6'}}><h1>Mock Landing Page</h1></header>\n"
+        "      <main style={{padding: '2rem'}}><p>Reconstructed by mock mode. No real API call.</p></main>\n"
+        "      <footer style={{padding: '2rem', background: '#f3f4f6'}}><p>Footer</p></footer>\n"
+        "    </div>\n"
+        "  );\n"
+        "}\n"
+    ),
+}
+
+
 def _mock_reconstruction(
     *, screenshot_bytes: bytes, styling: str
 ) -> ReconstructedComponent:
-    """Deterministic canned ReconstructedComponent for CI + local
-    exploration. No Instructor import, no provider SDK, no key. The
-    input byte count is echoed into `notes` so tests can prove the
-    mock saw its input (anti-refactor guard convention agent #01 uses).
-
-    The JSX is intentionally minimal (header + main + footer) but
-    genuinely parseable -- a reader who copy-pastes the mock output
-    into a React project gets something that renders, not a stub."""
-    byte_count = len(screenshot_bytes)
-    styling_note = "with Tailwind classes" if styling == "tailwind" else "with inline styles"
-
-    if styling == "tailwind":
-        jsx = (
-            "function MockLandingPage() {\n"
-            "  return (\n"
-            '    <div className="min-h-screen bg-white">\n'
-            '      <header className="p-8 bg-gray-100">\n'
-            "        <h1>Mock Landing Page</h1>\n"
-            "      </header>\n"
-            '      <main className="p-8">\n'
-            "        <p>Reconstructed by mock mode. No real API call.</p>\n"
-            "      </main>\n"
-            '      <footer className="p-8 bg-gray-100">\n'
-            "        <p>Footer</p>\n"
-            "      </footer>\n"
-            "    </div>\n"
-            "  );\n"
-            "}\n"
-        )
-    else:
-        jsx = (
-            "function MockLandingPage() {\n"
-            "  return (\n"
-            "    <div style={{minHeight: '100vh', background: '#fff'}}>\n"
-            "      <header style={{padding: '2rem', background: '#f3f4f6'}}>\n"
-            "        <h1>Mock Landing Page</h1>\n"
-            "      </header>\n"
-            "      <main style={{padding: '2rem'}}>\n"
-            "        <p>Reconstructed by mock mode. No real API call.</p>\n"
-            "      </main>\n"
-            "      <footer style={{padding: '2rem', background: '#f3f4f6'}}>\n"
-            "        <p>Footer</p>\n"
-            "      </footer>\n"
-            "    </div>\n"
-            "  );\n"
-            "}\n"
-        )
-
+    """Deterministic canned ReconstructedComponent. Input byte count is
+    echoed into `notes` so tests prove the mock saw its input (anti-
+    refactor guard convention agent #01 uses)."""
     return ReconstructedComponent(
         component_name="MockLandingPage",
-        jsx_code=jsx,
+        jsx_code=_MOCK_JSX_TEMPLATES[styling],
         imports=[],
         styling_approach=styling,  # type: ignore[arg-type]
         notes=(
-            f"[MOCK] Generated from {byte_count} bytes of screenshot input "
-            f"{styling_note}. This is a canned placeholder; set "
-            "LLM_PROVIDER to a real provider for actual reconstruction."
+            f"[MOCK] Generated from {len(screenshot_bytes)} bytes of "
+            f"screenshot input. Set LLM_PROVIDER to a real provider for "
+            "actual reconstruction."
         ),
         detected_sections=["header", "main", "footer"],
     )

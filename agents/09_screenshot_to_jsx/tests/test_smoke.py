@@ -43,6 +43,7 @@ _guess_media_type = _agent._guess_media_type
 _mock_reconstruction = _agent._mock_reconstruction
 SUPPORTED_PROVIDERS = _agent.SUPPORTED_PROVIDERS
 DEFAULT_STYLING = _agent.DEFAULT_STYLING
+MAX_SCREENSHOT_BYTES = _agent.MAX_SCREENSHOT_BYTES
 ReconstructedComponent = _schemas.ReconstructedComponent
 
 _EXAMPLES_DIR = _AGENT_DIR / "examples"
@@ -147,6 +148,29 @@ def test_jsx_code_accepts_const_declaration_form():
     assert r.component_name == "MyComp"
 
 
+def test_jsx_code_validator_false_passes_on_comment_mention():
+    """KNOWN LIMITATION -- pinned here explicitly rather than left as
+    an untested surprise. The regex validator matches `function <name>`
+    or `const <name> =` anywhere in the string, including inside JS
+    comments. A model whose real JSX defines `Homepage` but has a
+    comment `// renamed from LandingPage` and claims
+    component_name='LandingPage' passes validation. Real defense
+    would need a JSX parser (out of scope for Phase A; documented in
+    README's 'Where this fails'). If v1.1 adds a JSX parser, this
+    test should flip to `pytest.raises(ValidationError)`."""
+    misleading = ReconstructedComponent(
+        component_name="LandingPage",
+        jsx_code=(
+            "// function LandingPage was renamed to Homepage\n"
+            "function Homepage() { return null; }\n"
+        ),
+        styling_approach="tailwind",
+    )
+    # Currently PASSES; documenting the current behavior as intentional
+    # for now, not desired long-term.
+    assert misleading.component_name == "LandingPage"
+
+
 def test_imports_reject_empty_strings():
     """An empty string in the imports list would produce a broken
     `import '' from ''` in the caller's code. Reject."""
@@ -214,16 +238,50 @@ def test_reconstruct_rejects_zero_byte_screenshot(monkeypatch):
         reconstruct(b"", media_type="image/png")
 
 
-def test_reconstruct_rejects_unknown_media_type(monkeypatch):
+def test_reconstruct_rejects_oversized_screenshot(monkeypatch):
+    """Vision providers cap image input at ~20 MB; reject BEFORE
+    base64-encoding so a caller passing a 50 MB screenshot gets a
+    clear domain error rather than a cryptic 'content too large'
+    surfacing from inside Instructor."""
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
-    with pytest.raises(ValueError, match="Unknown media_type"):
+    huge = b"x" * (MAX_SCREENSHOT_BYTES + 1)
+    with pytest.raises(ScreenshotToJsxError, match="over the"):
+        reconstruct(huge, media_type="image/png")
+
+
+def test_reconstruct_rejects_unknown_media_type(monkeypatch):
+    """Unified error boundary: unknown media_type raises
+    ScreenshotToJsxError (not ValueError) so a caller with a single
+    `except ScreenshotToJsxError` catches every input-validation case."""
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    with pytest.raises(ScreenshotToJsxError, match="Unknown media_type"):
         reconstruct(b"x" * 100, media_type="image/bmp")
 
 
 def test_reconstruct_rejects_unknown_styling(monkeypatch):
+    """Same unified error boundary as unknown media_type."""
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
-    with pytest.raises(ValueError, match="Unknown styling"):
+    with pytest.raises(ScreenshotToJsxError, match="Unknown styling"):
         reconstruct(b"x" * 100, media_type="image/png", styling="css_modules")  # type: ignore[arg-type]
+
+
+def test_reconstruct_input_validation_all_raise_the_same_type(monkeypatch):
+    """Callers wrapping reconstruct() in `except ScreenshotToJsxError`
+    should catch ALL boundary-validation failures with one clause. This
+    test locks that contract; a future refactor that raises anything
+    other than ScreenshotToJsxError for these four cases breaks it."""
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    cases = [
+        (b"", "image/png", "tailwind"),
+        (b"x" * (MAX_SCREENSHOT_BYTES + 1), "image/png", "tailwind"),
+        (b"x" * 100, "image/bmp", "tailwind"),
+        (b"x" * 100, "image/png", "css_modules"),
+    ]
+    for screenshot_bytes, media_type, styling in cases:
+        with pytest.raises(ScreenshotToJsxError):
+            reconstruct(
+                screenshot_bytes, media_type=media_type, styling=styling  # type: ignore[arg-type]
+            )
 
 
 def test_translate_api_error_class_name_rate_limit():

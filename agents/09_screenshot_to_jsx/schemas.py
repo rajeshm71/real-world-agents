@@ -13,6 +13,13 @@ wrong" outputs:
 2. `jsx_code` must actually define a function or const with that
    name; otherwise the caller's `import { <name> } from '...'` won't
    resolve.
+
+Note: `styling_approach` is a two-value `Literal["tailwind",
+"inline_styles"]`. `css_modules` was considered and dropped: the prompt
+only instructs the model to produce Tailwind or inline styles, so
+adding `css_modules` to the Literal would allow an unreachable state
+the model would never legitimately hit. If a v1.1 adds CSS Modules
+generation, extend both the Literal and the prompt together.
 """
 
 from __future__ import annotations
