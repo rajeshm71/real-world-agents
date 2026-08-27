@@ -9,7 +9,7 @@ dependencies = [
     # OpenAI Agents SDK: the whole point of this agent. Verified 0.22.0 on
     # PyPI 2026-08-21. Provider-agnostic via LiteLLM (documented as a
     # one-line swap in the README; not shipped in v1 to keep deps tight).
-    "openai-agents>=0.22",
+    "openai-agents>=0.20,<0.21",  # 0.21+ requires openai>=3.0 which conflicts with instructor's openai<3.0 cap (agents #01/#09)
     # OpenAI SDK: openai-agents transitively depends on it, but list
     # explicitly for the reader's benefit and pin discipline.
     "openai>=1.50",

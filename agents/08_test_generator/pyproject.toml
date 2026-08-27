@@ -7,7 +7,7 @@ license = { text = "MIT" }
 dependencies = [
     "real-world-agents",  # for common.llm / common.pricing + workspace resolution
     # OpenAI Agents SDK: same pin agent #04 uses (verified 0.22.0 on PyPI 2026-08-21).
-    "openai-agents>=0.22",
+    "openai-agents>=0.20,<0.21",  # 0.21+ requires openai>=3.0 which conflicts with instructor's openai<3.0 cap (agents #01/#09)
     # openai listed explicitly for pin discipline; the SDK delegates.
     "openai>=1.50",
     "pydantic>=2.5",
