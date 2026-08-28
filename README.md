@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**13 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), #09 (screenshot -> React JSX), #10 (policy Q&A over handbook), #11 (resume screener), #13 (from-scratch agent loop), and #14 (podcast episode processor) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**14 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), #09 (screenshot -> React JSX), #10 (policy Q&A over handbook), #11 (resume screener), #13 (from-scratch agent loop), #14 (podcast episode processor), and #15 (contact / ID extractor) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
@@ -27,6 +27,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 11 | [Resume screener](agents/11_resume_screener/) | Batch + ranking with evidence-cross-checked rationale over multi-format inputs (pdf/docx/md/txt) | PydanticAI + OpenAI (subset-schema pattern with caller-injected known fields) | N/A | HR/recruiting first-pass triage with per-candidate evidence and a ranked list |
 | 13 | [From-scratch agent loop](agents/13_from_scratch_loop/) | The tool-use agent loop, hand-rolled: what LangGraph / OpenAI Agents SDK / CrewAI / PydanticAI wrap, in one file | Plain Python + raw OpenAI Chat Completions (no framework) | N/A | Codebase Q&A over any local repository |
 | 14 | [Podcast episode processor](agents/14_podcast_processor/) | Three-stage audio pipeline: fetch (local or YouTube) -> local Whisper transcript -> LLM-generated chapters + summary + verbatim key quotes | Plain Python + faster-whisper (local ONNX/CT2) + yt-dlp + Anthropic | N/A | Podcast creators auto-generating chapter markers, summaries, and quote pull-outs |
+| 15 | [Contact / ID extractor](agents/15_contact_extractor/) | Batch vision extraction + embedding-based dedup + PII-safe redaction (per-field none/hash/redact policy with salted SHA-256) | Instructor + OpenAI vision + fastembed | N/A | KYC / CRM first-pass triage: one photo of a stack of cards -> deduplicated compliance-safe contact list |
 
 ## Roadmap
 
@@ -35,7 +36,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
 | 12 | Interview prep agent | Adaptive Q&A generation from a JD | OpenAI Agents SDK | Job seekers |
-| 15 | Business card / ID extractor | Structured extraction with vision (variant of #01) | Instructor + Anthropic | KYC / contact capture |
 
 ## Quick start
 

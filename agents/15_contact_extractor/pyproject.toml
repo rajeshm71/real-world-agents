@@ -1,0 +1,30 @@
+[project]
+name = "contact-extractor"
+version = "0.1.0"
+description = "Agent #15: batch vision + embedding-based dedup + PII-safe redaction. One photo of N business cards / IDs -> deduplicated Contact list with configurable per-field hash/redact policy."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",
+    # Vision structured extraction. Same pin as #01/#09.
+    "instructor>=1.7",
+    "openai>=1.50",
+    # Local embeddings for the dedup step. Same pin as #10 (ONNX,
+    # no torch; ~50 MB dep footprint, ~30 MB model cached on first
+    # embed call).
+    "fastembed>=0.8",
+    "pydantic>=2.5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
