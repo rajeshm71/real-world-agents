@@ -287,11 +287,17 @@ def _ollama_json_call(
     working_messages = list(messages)
     for attempt in range(_JSON_PARSE_RETRIES + 1):
         try:
+            # `think=False` disables reasoning-mode output on models
+            # that support it (qwen3.x, deepseek-r1, etc.). Without it,
+            # reasoning tokens crowd out the actual structured response
+            # and .message.content comes back empty. Non-reasoning
+            # models silently ignore the flag.
             resp = ollama_client.chat(
                 model=ollama_model,
                 messages=working_messages,
                 format=schema,
                 options={"temperature": 0.0},
+                think=False,
             )
         except Exception as exc:
             raise _translate_llm_error(exc, stage=stage, claim_id=claim_id) from exc
