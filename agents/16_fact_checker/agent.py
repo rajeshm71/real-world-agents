@@ -90,6 +90,13 @@ _VERIFY_PROMPT_PATH = Path(__file__).parent / "prompts" / "verify.txt"
 
 _MAX_SEARCH_QUERY_LEN = 400  # Tavily / Brave both cap around this.
 _JSON_PARSE_RETRIES = 1
+# Ollama's default num_ctx is 2048 tokens -- silently TRUNCATES any
+# input longer than that. A 15-minute transcript is ~3-5k tokens; the
+# extract-stage prompt plus transcript can easily exceed the default
+# and the model sees only the head. 8192 fits a ~30-minute transcript
+# comfortably; users with longer content can pass their own via the
+# _ollama_client hook.
+_OLLAMA_NUM_CTX = 8192
 
 
 # --- Error type ------------------------------------------------------------
@@ -296,7 +303,7 @@ def _ollama_json_call(
                 model=ollama_model,
                 messages=working_messages,
                 format=schema,
-                options={"temperature": 0.0},
+                options={"temperature": 0.0, "num_ctx": _OLLAMA_NUM_CTX},
                 think=False,
             )
         except Exception as exc:
