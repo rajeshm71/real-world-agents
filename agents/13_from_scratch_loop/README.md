@@ -6,7 +6,7 @@ Ask a question about a local repository. The agent uses three file-system tools 
 
 | Path | Status |
 |---|---|
-| Mock mode (`LLM_PROVIDER=mock`) | Fully covered by 34-test suite |
+| Mock mode (`LLM_PROVIDER=mock`) | Fully covered by the shipped test suite |
 | Loop with scripted LLM (happy path, no-tool, max-iter, unknown tool, multi-call, malformed args, preamble+calls, dispatch crash) | Fully covered |
 | Tools against real file-system (list/read/grep, caps, path-traversal, symlink guard, bad regex) | Fully covered on `tmp_path` |
 | Schema validators (all cross-field rules, both directions) | Fully covered |

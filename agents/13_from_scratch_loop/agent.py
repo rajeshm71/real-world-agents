@@ -54,6 +54,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 try:
     from .schemas import AgentStep, AgentTrace, ToolCall, ToolResult
 except ImportError:
@@ -399,7 +401,10 @@ def ask(
     if not repo_root_path.exists() or not repo_root_path.is_dir():
         raise AgentError(f"repo_root {repo_root!r} is not an existing directory.")
 
-    resolved = provider or resolve_provider()
+    try:
+        resolved = provider or resolve_provider()
+    except ValueError as exc:
+        raise AgentError(str(exc)) from exc
 
     if resolved == "mock":
         return _mock_trace(question, repo_root=repo_root_path)
@@ -428,9 +433,31 @@ def ask(
         messages.append(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
+            # Modern OpenAI models sometimes null out content (refusal, or a
+            # response shape the SDK returns as list-of-parts). Coerce to a
+            # clean str; if nothing usable is there, terminate as error so
+            # the caller sees why instead of a downstream ValidationError.
+            raw_content = msg.content
+            final = raw_content if isinstance(raw_content, str) else ""
+            refusal = getattr(msg, "refusal", None)
+            if not final.strip() and isinstance(refusal, str) and refusal.strip():
+                final = refusal
+            if not final.strip():
+                return AgentTrace(
+                    question=question,
+                    final_answer="",
+                    steps=steps,
+                    terminated_by="error",
+                    iterations_used=iteration,
+                    error_reason=(
+                        "model returned neither tool_calls nor answer text "
+                        "(likely a refusal, an empty completion, or a "
+                        "response shape the loop does not handle)."
+                    ),
+                )
             return AgentTrace(
                 question=question,
-                final_answer=msg.content or "",
+                final_answer=final,
                 steps=steps,
                 terminated_by="final_answer",
                 iterations_used=iteration,
@@ -438,30 +465,34 @@ def ask(
 
         step_calls: list[ToolCall] = []
         step_results: list[ToolResult] = []
-        for tc in msg.tool_calls:
+        for slot, tc in enumerate(msg.tool_calls):
+            # Coerce name/id defensively so downstream ToolCall construction
+            # cannot raise on an empty string the SDK technically permits.
+            safe_name = tc.function.name or "<unknown>"
+            safe_call_id = tc.id or f"synth_iter{iteration}_slot{slot}"
             try:
                 arguments = json.loads(tc.function.arguments or "{}")
                 if not isinstance(arguments, dict):
                     raise TypeError("tool arguments must decode to a JSON object.")
-            except (json.JSONDecodeError, TypeError) as exc:
+            except (json.JSONDecodeError, TypeError, ValidationError) as exc:
                 # Recoverable: append the malformed call anyway so the
                 # loop's contract (one result per call) holds, and tell
                 # the model what went wrong.
                 parsed = ToolCall(
-                    tool_name=tc.function.name,
+                    tool_name=safe_name,
                     arguments={},
-                    call_id=tc.id,
+                    call_id=safe_call_id,
                 )
                 result = ToolResult(
-                    call_id=tc.id,
+                    call_id=safe_call_id,
                     content="",
                     error=f"could not parse tool arguments as JSON: {exc}",
                 )
             else:
                 parsed = ToolCall(
-                    tool_name=tc.function.name,
+                    tool_name=safe_name,
                     arguments=arguments,
-                    call_id=tc.id,
+                    call_id=safe_call_id,
                 )
                 result = _dispatch(parsed, repo_root=repo_root_path)
             step_calls.append(parsed)
@@ -469,15 +500,19 @@ def ask(
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": tc.id,
+                    "tool_call_id": safe_call_id,
                     "content": result.error or result.content,
                 }
             )
 
+        # L2: msg.content is typed str|None in the SDK today, but future
+        # structured-output shapes could return a non-str. Store only what
+        # AgentStep accepts; drop anything else on the floor.
+        step_assistant_message = msg.content if isinstance(msg.content, str) else None
         steps.append(
             AgentStep(
                 iteration=iteration,
-                assistant_message=msg.content,
+                assistant_message=step_assistant_message,
                 tool_calls=step_calls,
                 tool_results=step_results,
             )

@@ -476,9 +476,75 @@ def test_translator_message_rate_limit():
     assert "rate-limited" in err.message
 
 
+def test_translator_message_auth():
+    err = _translate_api_error(RuntimeError("Invalid API key provided: sk-***"))
+    assert "OPENAI_API_KEY" in err.message
+
+
 def test_translator_generic_fallthrough():
     err = _translate_api_error(RuntimeError("something else weird"))
     assert "LLM call failed" in err.message
+
+
+# --- 7. Post-review hardening (H1, H2, M1) --------------------------------
+
+
+def test_empty_final_content_terminates_as_error(monkeypatch):
+    """H1: model returns neither tool_calls nor content -- must terminate
+    as `error` with a reason, not raise a ValidationError from AgentTrace."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    responses = [_stub_response(_stub_message(content=None, tool_calls=None))]
+    trace = ask("hello", repo_root=_SAMPLE_REPO, _client=ScriptedClient(responses))
+    assert trace.terminated_by == "error"
+    assert "refusal" in (trace.error_reason or "")
+
+
+def test_refusal_field_used_as_final_answer(monkeypatch):
+    """H1: if `msg.refusal` carries the text, treat it as the final answer
+    rather than silently dropping it."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    msg = _stub_message(content=None, tool_calls=None)
+    msg.refusal = "I cannot help with that request."
+    trace = ask("harm", repo_root=_SAMPLE_REPO, _client=ScriptedClient([_stub_response(msg)]))
+    assert trace.terminated_by == "final_answer"
+    assert "cannot help" in trace.final_answer
+
+
+def test_empty_tool_name_and_id_do_not_crash_loop(monkeypatch):
+    """H2: an OpenAI SDK response with empty tool_call name/id must not
+    escape the recoverable-error branch as a ValidationError."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    bad_tc = _stub_tool_call("", "not json", "")
+    responses = [
+        _stub_response(_stub_message(content=None, tool_calls=[bad_tc])),
+        _stub_response(_stub_message(content="recovered", tool_calls=None)),
+    ]
+    trace = ask("x", repo_root=_SAMPLE_REPO, _client=ScriptedClient(responses))
+    assert trace.terminated_by == "final_answer"
+    assert trace.steps[0].tool_calls[0].tool_name == "<unknown>"
+    assert trace.steps[0].tool_calls[0].call_id.startswith("synth_iter1_slot0")
+
+
+def test_bad_provider_raises_agent_error_not_value_error(monkeypatch):
+    """M1: LLM_PROVIDER=bogus must surface as AgentError so the CLI's
+    error handler catches it cleanly."""
+    monkeypatch.setenv("LLM_PROVIDER", "bogus")
+    with pytest.raises(AgentError, match="Unknown LLM_PROVIDER"):
+        ask("hi", repo_root=_SAMPLE_REPO)
+
+
+def test_non_string_content_is_coerced_to_none(monkeypatch):
+    """L2: future SDK could hand back a list-of-parts. Store None instead
+    of tripping the AgentStep validator."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    msg = _stub_message(content=None, tool_calls=[_stub_tool_call("list_files", {}, "c1")])
+    msg.content = [{"type": "text", "text": "hi"}]  # simulate list-of-parts
+    responses = [
+        _stub_response(msg),
+        _stub_response(_stub_message(content="done", tool_calls=None)),
+    ]
+    trace = ask("x", repo_root=_SAMPLE_REPO, _client=ScriptedClient(responses))
+    assert trace.steps[0].assistant_message is None
 
 
 # --- 6. Constants + sample_repo + tool-schema sanity ----------------------
