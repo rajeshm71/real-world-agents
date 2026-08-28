@@ -162,7 +162,9 @@ class CandidateScorecard(BaseModel):
         return self
 
 
-def _recommendation_for(overall_score: int) -> str:
+def _recommendation_for(
+    overall_score: int,
+) -> Literal["strong_yes", "yes", "borderline", "no"]:
     """Rubric mapping used both by the scorecard validator and by the
     mock-mode generator so they stay in lockstep."""
     if overall_score >= 80:

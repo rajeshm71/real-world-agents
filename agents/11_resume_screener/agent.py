@@ -37,11 +37,11 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 try:
     from .schemas import (
@@ -80,11 +80,17 @@ _PROMPT_PATH = Path(__file__).parent / "prompts" / "system.txt"
 @dataclass
 class ScreenerAttempt:
     """Partial state attached to ScreenerError. `stage` names where
-    things went wrong; the other fields are populated when relevant."""
+    things went wrong; the other fields are populated when relevant.
+
+    `completed_scorecards` is populated when a batch fails partway --
+    holds the scorecards that succeeded before the offending resume
+    hit, so the caller can salvage the completed work instead of
+    losing everything on the first failure."""
 
     stage: Literal["load", "parse", "llm"]
     resume_id: str | None = None
     raw_output: str = ""
+    completed_scorecards: list[CandidateScorecard] = field(default_factory=list)
 
 
 class ScreenerError(Exception):
@@ -175,13 +181,15 @@ def _load_pdf_text(path: Path) -> str:
         ) from exc
     try:
         reader = PdfReader(str(path))
-        pages = [(p.extract_text() or "") for p in reader.pages]
+        # Strip each page so a trailing newline from extract_text() doesn't
+        # compound with the "\n\n" join separator into "\n\n\n\n" runs.
+        pages = [(p.extract_text() or "").strip() for p in reader.pages]
     except Exception as exc:
         raise ScreenerError(
             f"pypdf failed on {path.name!r}: {type(exc).__name__}: {exc}.",
             partial=ScreenerAttempt(stage="load"),
         ) from exc
-    return "\n\n".join(pages)
+    return "\n\n".join(p for p in pages if p)
 
 
 def _load_docx_text(path: Path) -> str:
@@ -203,7 +211,11 @@ def _load_docx_text(path: Path) -> str:
     parts: list[str] = [p.text for p in doc.paragraphs if p.text.strip()]
     for table in doc.tables:
         for row in table.rows:
-            parts.append(" | ".join(cell.text for cell in row.cells))
+            row_text = " | ".join(cell.text for cell in row.cells)
+            # A row from a template with all-empty cells prints as
+            # " |  | "; skip those so the LLM doesn't see the noise.
+            if row_text.strip(" |"):
+                parts.append(row_text)
     return "\n".join(parts)
 
 
@@ -303,12 +315,18 @@ def screen_candidates(
             scorecards.append(
                 _score_one(agent, job_description=job_description, resume=resume)
             )
-        except ScreenerError:
+        except ScreenerError as exc:
+            # Attach already-completed scorecards so the caller can
+            # salvage prior work instead of losing everything on the
+            # first parse failure mid-batch.
+            if exc.partial is not None:
+                exc.partial.completed_scorecards = list(scorecards)
             raise
         except Exception as exc:
-            raise _translate_api_error(
-                exc, resume_id=resume.resume_id
-            ) from exc
+            translated = _translate_api_error(exc, resume_id=resume.resume_id)
+            if translated.partial is not None:
+                translated.partial.completed_scorecards = list(scorecards)
+            raise translated from exc
 
     ranked_ids = _rank(scorecards)
     return ScreeningResult(
@@ -345,7 +363,7 @@ def _score_one(
             overall_rationale=scoring.overall_rationale,
             recommendation=scoring.recommendation,
         )
-    except Exception as exc:
+    except ValidationError as exc:
         raise ScreenerError(
             f"scorecard for {resume.resume_id!r} failed cross-field "
             f"validation: {exc}",
@@ -474,7 +492,7 @@ def _mock_scorecard(job_description: str, resume: ResumeInput) -> CandidateScore
             f"[MOCK overall for JD of length {len(job_description)}] "
             f"Averaged three dimensions to {overall} for {resume.candidate_name}."
         ),
-        recommendation=_recommendation_for(overall),  # type: ignore[arg-type]
+        recommendation=_recommendation_for(overall),
     )
 
 

@@ -98,7 +98,7 @@ def _good_scorecard(
         dimensions=dims,
         overall_score=overall,
         overall_rationale="solid match",
-        recommendation=_recommendation_for(overall),  # type: ignore[arg-type]
+        recommendation=_recommendation_for(overall),
     )
 
 
@@ -201,6 +201,11 @@ def test_stem_to_display_name_snake_case():
     assert _stem_to_display_name("alice_smith") == "Alice Smith"
     assert _stem_to_display_name("alice-smith") == "Alice Smith"
     assert _stem_to_display_name("alice smith") == "Alice Smith"
+
+
+def test_stem_to_display_name_single_token():
+    assert _stem_to_display_name("alice") == "Alice"
+    assert _stem_to_display_name("") == ""
 
 
 def test_resume_id_is_lowercased_stem(tmp_path):
@@ -441,6 +446,117 @@ def test_translator_message_auth():
 def test_translator_generic_fallthrough():
     err = _translate_api_error(RuntimeError("something else"))
     assert "LLM call failed" in err.message
+
+
+# --- 7. Post-review hardening (M1, M2, L1, L4) ----------------------------
+
+
+class _ScriptedAgent:
+    """Duck-typed stand-in for a PydanticAI Agent. `outputs` is a list
+    of _ScoringOutput OR Exception instances; each `run_sync` call
+    consumes the next one."""
+
+    def __init__(self, outputs):
+        self._outputs = list(outputs)
+
+    def run_sync(self, user_prompt):
+        item = self._outputs.pop(0)
+        if isinstance(item, Exception):
+            raise item
+
+        class _Result:
+            output = item
+
+        return _Result()
+
+
+def _good_scoring_output(overall: int = 70, resume_text: str = "Python Postgres"):
+    """A _ScoringOutput-shaped duck-type that _score_one accepts."""
+    ScoringOutput = _agent._ScoringOutput
+    return ScoringOutput(
+        dimensions=[
+            DimensionScore(
+                name=name,
+                score=overall,
+                rationale="ok",
+                evidence=[EvidenceExcerpt(quoted_text=resume_text[:15])],
+            )
+            for name in DIMENSION_NAMES
+        ],
+        overall_score=overall,
+        overall_rationale="ok",
+        recommendation=_recommendation_for(overall),
+    )
+
+
+def test_batch_partial_attaches_completed_scorecards(monkeypatch):
+    """M2: when resume #N fails mid-batch, the ScreenerError's partial
+    must carry the (N-1) already-scored cards so the caller can salvage
+    them instead of losing all work."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    # Three resumes; scoring succeeds twice, then raises a bad
+    # ValidationError-shaped exception on the third.
+    good1 = _good_scoring_output(overall=80, resume_text="Python distributed")
+    good2 = _good_scoring_output(overall=60, resume_text="Django REST")
+    agent = _ScriptedAgent(
+        [good1, good2, RuntimeError("openai went boom on resume #3")]
+    )
+    resumes = [
+        ResumeInput(resume_id="a", candidate_name="A", resume_text="Python distributed"),
+        ResumeInput(resume_id="b", candidate_name="B", resume_text="Django REST"),
+        ResumeInput(resume_id="c", candidate_name="C", resume_text="Rust systems"),
+    ]
+    with pytest.raises(ScreenerError) as exc_info:
+        screen_candidates("jd", resumes, provider="openai", _agent=agent)
+    assert exc_info.value.partial is not None
+    completed = exc_info.value.partial.completed_scorecards
+    assert len(completed) == 2
+    assert {c.resume_id for c in completed} == {"a", "b"}
+
+
+def test_score_one_narrow_catch_only_validation_error(monkeypatch):
+    """M1: _score_one now catches ValidationError specifically, so a
+    non-validation error from PydanticAI bubbles up unchanged and hits
+    the R5 translator instead of being mislabeled as 'validation'."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    agent = _ScriptedAgent([RuntimeError("some_llm_side_error")])
+    resumes = [
+        ResumeInput(resume_id="a", candidate_name="A", resume_text="Python"),
+    ]
+    with pytest.raises(ScreenerError) as exc_info:
+        screen_candidates("jd", resumes, provider="openai", _agent=agent)
+    # Comes back through _translate_api_error's generic branch, NOT
+    # "cross-field validation".
+    assert "LLM call failed" in exc_info.value.message
+
+
+def test_docx_loader_skips_empty_template_rows(tmp_path):
+    """L1: rows made only of empty cells produce `" |  | "` noise
+    strings; the loader should skip them."""
+    docx = pytest.importorskip("docx")
+    p = tmp_path / "with_empty_table.docx"
+    doc = docx.Document()
+    doc.add_paragraph("Real content here.")
+    table = doc.add_table(rows=2, cols=3)
+    # First row all empty (template placeholder), second row has content.
+    table.rows[1].cells[0].text = "Header"
+    table.rows[1].cells[1].text = "Value"
+    doc.save(str(p))
+    text = _agent._load_docx_text(p)
+    assert "Real content here" in text
+    assert "Header" in text
+    # The all-empty row should NOT appear.
+    assert " |  | " not in text
+
+
+def test_pdf_loader_strips_pages_before_join():
+    """L4: page text is stripped so multi-blank-line runs don't build
+    up between pages. Verified against the shipped alice.pdf (single
+    page here, but the strip-then-join contract is exercised)."""
+    pytest.importorskip("pypdf")
+    text = _agent._load_pdf_text(_RESUMES / "alice.pdf")
+    # No run of three or more consecutive newlines.
+    assert "\n\n\n" not in text
 
 
 # --- 6. Constants + example sanity ----------------------------------------
