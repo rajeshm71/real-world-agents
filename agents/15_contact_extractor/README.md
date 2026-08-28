@@ -110,6 +110,7 @@ Estimated cost per real run at `gpt-4o-mini` vision pricing: **~$0.001 per image
 - **Hashed fields are salted per-run by default.** Cross-run correlation ("did I see this email last week?") requires passing a persistent `run_salt`. Without it, the same email in two different runs produces two different hashes.
 - **20 MB image cap.** Larger images raise `ContactError` before the vision call. Downscale before sending.
 - **English-centric bge model.** Non-Latin scripts underperform in the dedup similarity step (though the vision model itself handles many scripts).
+- **International phone dedup uses the last 10 digits.** A UK number and a US number whose last-10 digits happen to match would be treated as a phone match. In practice the dedup gate also requires cosine similarity of the name+company string, so a full false merge is extremely unlikely, but note the underlying key is not globally unique.
 
 ## Roadmap (post-v1 improvements)
 

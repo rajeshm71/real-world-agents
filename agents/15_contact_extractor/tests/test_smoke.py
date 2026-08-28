@@ -429,9 +429,55 @@ def test_read_image_rejects_over_20mb(tmp_path):
         _read_image(p)
 
 
-def test_apply_policy_to_raws_strips_email_under_hash(monkeypatch):
-    """RawContact's email-shape validator would reject a hashed value;
-    the raws-redaction path must fall back to None instead."""
+def test_apply_policy_to_raws_email_hash_marker_round_trips():
+    """RawContact's email validator now accepts hash markers, so the
+    raws-side redaction preserves the 'this card had an email' signal
+    instead of dropping it to None."""
     raws = [_r(0, full_name="A", email="a@example.com")]
     redacted = _apply_policy_to_raws(raws, policy=PiiPolicy.strict(), run_salt="s")
-    assert redacted[0].email is None
+    assert redacted[0].email is not None
+    assert "..." in redacted[0].email
+
+
+def test_apply_policy_to_raws_email_redact_sentinel_round_trips():
+    raws = [_r(0, full_name="A", email="a@example.com")]
+    redacted = _apply_policy_to_raws(raws, policy=PiiPolicy.redacted(), run_salt="s")
+    assert redacted[0].email == REDACT_SENTINEL
+
+
+def test_raw_contact_email_accepts_hash_marker():
+    """The email validator must let a hash-marker through so the
+    redaction round-trip in _apply_policy_to_raws does not blow up."""
+    marker = "0123456789abcdef...com"  # 16 hex + '...' + 3 chars
+    # Regex requires exactly 4-char tail:
+    marker = "0123456789abcdef....com"
+    RawContact(card_index=0, full_name="A", email=marker)
+
+
+def test_raw_contact_email_accepts_redact_sentinel():
+    RawContact(card_index=0, full_name="A", email=REDACT_SENTINEL)
+
+
+def test_read_image_maps_jpg_to_jpeg_mime(tmp_path):
+    """H1: `.jpg` files must resolve to `image/jpeg`, not `image/jpg`."""
+    p = tmp_path / "card.jpg"
+    p.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
+    _data, mime = _read_image(p)
+    assert mime == "jpeg"
+
+
+def test_read_image_sniffs_bytes_input():
+    """L1: raw bytes input must sniff the header, not assume PNG."""
+    jpeg_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+    _data, mime = _read_image(jpeg_bytes)
+    assert mime == "jpeg"
+
+
+def test_hash_marker_regex_requires_exact_four_char_tail():
+    """L2: the tighter regex should reject a shorter or longer tail."""
+    from importlib import import_module
+    schemas_mod = import_module("15_contact_extractor.schemas")
+    marker_re = schemas_mod._HASH_MARKER_RE
+    assert marker_re.match("0123456789abcdef....com")   # 4-char tail: ok
+    assert not marker_re.match("0123456789abcdef...co")  # 2-char tail: no
+    assert not marker_re.match("0123456789abcdef...toolong")  # 7-char tail: no

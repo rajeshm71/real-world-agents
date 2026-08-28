@@ -31,8 +31,8 @@ from pydantic import BaseModel, Field, model_validator
 # repo does not depend on pydantic[email].
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 # Hash marker shape produced by _apply_policy: 16 hex chars + '...' +
-# last-4 of the original value (or 'XXXX' when the value is too short).
-_HASH_MARKER_RE = re.compile(r"^[0-9a-f]{16}\.\.\..{1,8}$")
+# last-4 of the original value (or padded to 4 with 'X' when short).
+_HASH_MARKER_RE = re.compile(r"^[0-9a-f]{16}\.\.\..{4}$")
 REDACT_SENTINEL = "[REDACTED]"
 
 
@@ -51,12 +51,24 @@ class RawContact(BaseModel):
 
     @model_validator(mode="after")
     def _email_shape(self) -> RawContact:
-        if self.email is not None and not _EMAIL_RE.match(self.email):
-            raise ValueError(
-                f"email {self.email!r} does not look like an address; "
-                "the model must not fabricate one from partial text."
-            )
-        return self
+        # Accept: real email, hash marker, or REDACT sentinel. The
+        # last two exist so `_apply_policy_to_raws` can pass hashed
+        # or redacted emails back through RawContact for the on-disk
+        # dump without dropping to None (which would erase the
+        # "this card had an email" signal).
+        if self.email is None:
+            return self
+        if _EMAIL_RE.match(self.email):
+            return self
+        if _HASH_MARKER_RE.match(self.email):
+            return self
+        if self.email == REDACT_SENTINEL:
+            return self
+        raise ValueError(
+            f"email {self.email!r} does not look like an address, a "
+            "hash marker, or the redact sentinel; the model must not "
+            "fabricate an email from partial text."
+        )
 
 
 class PiiPolicy(BaseModel):

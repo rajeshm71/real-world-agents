@@ -119,12 +119,13 @@ def _load_system_prompt() -> str:
 
 
 def _read_image(source: str | Path | bytes) -> tuple[bytes, str]:
-    """Return (image_bytes, image_format) for the source. Format is
-    the lowercase extension without the dot ('png', 'jpg', 'jpeg',
-    'webp'). Enforces the 20 MB cap."""
+    """Return (image_bytes, image_mime) for the source. `image_mime`
+    is the second half of a Content-Type ('png', 'jpeg', 'webp') --
+    always the MIME subtype, never the file extension. Enforces the
+    20 MB cap."""
     if isinstance(source, bytes):
         data = source
-        fmt = "png"  # unknown; default to png -- most vision APIs sniff anyway
+        fmt = _sniff_image_mime(data)
     else:
         path = Path(source)
         if not path.exists() or not path.is_file():
@@ -140,7 +141,11 @@ def _read_image(source: str | Path | bytes) -> tuple[bytes, str]:
                 partial=ExtractionAttempt(stage="load"),
             )
         data = path.read_bytes()
-        fmt = suffix.lstrip(".")
+        # Map file extension to the correct MIME subtype: '.jpg' ->
+        # 'jpeg' (a real Content-Type has no image/jpg alias, and
+        # strict servers reject it).
+        raw_fmt = suffix.lstrip(".")
+        fmt = "jpeg" if raw_fmt == "jpg" else raw_fmt
     if len(data) > _MAX_IMAGE_BYTES:
         raise ContactError(
             f"image is {len(data) / 1024 / 1024:.1f} MB, over the "
@@ -151,6 +156,20 @@ def _read_image(source: str | Path | bytes) -> tuple[bytes, str]:
     return data, fmt
 
 
+def _sniff_image_mime(data: bytes) -> str:
+    """Guess the MIME subtype from the first few bytes of an image.
+    Falls back to 'png' when the header is ambiguous (better a wrong
+    MIME than a hard crash; strict callers should pass a Path so the
+    extension does the work)."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return "png"
+
+
 def _extract_raw(
     image: str | Path | bytes,
     *,
@@ -159,10 +178,14 @@ def _extract_raw(
 ) -> list[RawContact]:
     """Instructor + vision. Returns an ordered list of RawContacts,
     one per visible card in the source image."""
-    image_bytes, image_format = _read_image(image)
-    client = _instructor_client if _instructor_client is not None else _build_instructor()
+    image_bytes, image_mime = _read_image(image)
+    client = (
+        _instructor_client
+        if _instructor_client is not None
+        else _build_instructor(model=model)
+    )
     b64 = base64.b64encode(image_bytes).decode("ascii")
-    data_url = f"data:image/{image_format};base64,{b64}"
+    data_url = f"data:image/{image_mime};base64,{b64}"
     try:
         raws = client.chat.completions.create(
             model=model,
@@ -198,7 +221,10 @@ def _extract_raw(
     return raws
 
 
-def _build_instructor() -> Any:
+def _build_instructor(*, model: str) -> Any:
+    """Build the Instructor client bound to the actual model the caller
+    asked for. Retries once on structured-output validation failure so
+    the parse behavior mirrors #10 / #14's hand-rolled retry pattern."""
     try:
         import instructor
     except ImportError as exc:
@@ -206,7 +232,7 @@ def _build_instructor() -> Any:
             "instructor not installed. Run `uv sync --all-packages` from "
             "the repo root."
         ) from exc
-    return instructor.from_provider("openai/gpt-4o-mini")
+    return instructor.from_provider(f"openai/{model}", max_retries=1)
 
 
 # --- Stage B: dedup --------------------------------------------------------
@@ -422,29 +448,22 @@ def _apply_policy_to_raws(
 ) -> list[RawContact]:
     """Return a copy of `raws` with the per-field policy applied so
     the raw_contacts list in ExtractionResult also honors the policy
-    (no raw PII on disk under strict/redact)."""
+    (no raw PII on disk under strict/redact). Email now round-trips
+    through the same redaction path as phone/address -- RawContact's
+    email validator accepts hash markers and the REDACT sentinel, so
+    the audit signal 'this card had an email' is preserved."""
     return [
         RawContact(
             card_index=r.card_index,
             full_name=r.full_name,
             title=r.title,
             company=r.company,
-            email=_apply_email_for_raw(r.email, policy.email, run_salt=run_salt),
+            email=_redact_field(r.email, policy.email, run_salt=run_salt),
             phone=_redact_field(r.phone, policy.phone, run_salt=run_salt),
             address=_redact_field(r.address, policy.address, run_salt=run_salt),
         )
         for r in raws
     ]
-
-
-def _apply_email_for_raw(value: str | None, mode: str, *, run_salt: str) -> str | None:
-    """RawContact's email field has an email-shape validator; a hashed
-    or [REDACTED] value would fail that check. Bypass by returning None
-    for anything not passing 'none' through -- the redacted view is
-    already available in `Contact.email`."""
-    if mode == "none":
-        return value
-    return None
 
 
 # --- Public entry point ----------------------------------------------------
