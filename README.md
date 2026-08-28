@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**11 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), #09 (screenshot -> React JSX), #10 (policy Q&A over handbook), and #13 (from-scratch agent loop) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
+**12 of 15+ planned agents shipped.** Agents #01 (receipt/invoice extractor), #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), #09 (screenshot -> React JSX), #10 (policy Q&A over handbook), #11 (resume screener), and #13 (from-scratch agent loop) are live. The roadmap below lists what's coming next: no fixed schedule, agents ship when they're ready.
 
 ## Shipped agents
 
@@ -24,6 +24,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 08 | [Test generator](agents/08_test_generator/) | Tool use + iterative refinement: draft tests, run in a subprocess sandbox, read failures, rewrite | OpenAI Agents SDK + stdlib subprocess sandbox | N/A | Auto-generate pytest suites for small Python modules |
 | 09 | [Screenshot to React JSX](agents/09_screenshot_to_jsx/) | Multimodal structured extraction on a code domain (vision -> Pydantic-validated JSX) | Instructor + vision, multi-provider (Anthropic default) | N/A | First-draft React scaffolding from a design mockup or existing UI screenshot |
 | 10 | [Policy Q&A over handbook](agents/10_policy_qa/) | RAG with cross-field-verified citations, on-prem/private (embeddings never leave the box) | Plain Python + fastembed (local ONNX) + sqlite-vec (FAISS fallback) + Anthropic | N/A | HR internal Q&A tool, privacy-preserving |
+| 11 | [Resume screener](agents/11_resume_screener/) | Batch + ranking with evidence-cross-checked rationale over multi-format inputs (pdf/docx/md/txt) | PydanticAI + OpenAI (subset-schema pattern with caller-injected known fields) | N/A | HR/recruiting first-pass triage with per-candidate evidence and a ranked list |
 | 13 | [From-scratch agent loop](agents/13_from_scratch_loop/) | The tool-use agent loop, hand-rolled: what LangGraph / OpenAI Agents SDK / CrewAI / PydanticAI wrap, in one file | Plain Python + raw OpenAI Chat Completions (no framework) | N/A | Codebase Q&A over any local repository |
 
 ## Roadmap
@@ -32,7 +33,6 @@ Not yet shipped. Want to build one of these? Open an issue with the ["New agent"
 
 | # | Agent | Technique demonstrated | Framework | Real use case |
 |---|---|---|---|---|
-| 11 | Resume screener | Batch processing + ranking with rationale | PydanticAI + parallelism | HR/recruiting |
 | 12 | Interview prep agent | Adaptive Q&A generation from a JD | OpenAI Agents SDK | Job seekers |
 | 14 | Podcast episode processor | Audio → transcript → chapters + summary | Whisper + Anthropic | Creator tool |
 | 15 | Business card / ID extractor | Structured extraction with vision (variant of #01) | Instructor + Anthropic | KYC / contact capture |
