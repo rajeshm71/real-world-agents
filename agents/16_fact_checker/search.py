@@ -161,9 +161,14 @@ class DDGProvider:
 
 class ChainProvider:
     """Tries providers in order; on SearchRateLimit falls back to the
-    next. Raises SearchAllUnavailable when the chain is exhausted."""
+    next. Raises SearchAllUnavailable when the chain is exhausted.
 
-    provider_name: Literal["tavily", "brave", "ddg"] = "ddg"  # last-resort default
+    `provider_name` is intentionally "chain"; the actual provider that
+    answered any given `.search()` call lives in `last_used_provider`.
+    Callers that need the real provider should read that after the
+    call returns."""
+
+    provider_name: str = "chain"
 
     def __init__(self, providers: list[SearchClient]):
         if not providers:

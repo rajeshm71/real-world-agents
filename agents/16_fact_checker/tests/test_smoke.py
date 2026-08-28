@@ -349,10 +349,10 @@ def test_extract_empty_claims_ok():
 
 
 def test_extract_bad_json_raises():
-    resp = "not json at all"
+    """Two consecutive bad-JSON responses (retry-once exhausted) raise."""
     run_meta: dict = {}
     with pytest.raises(FactCheckError, match="non-JSON output"):
-        _extract_claims("source", ollama_client=_StubOllama([resp]),
+        _extract_claims("source", ollama_client=_StubOllama(["nope", "nope"]),
                         ollama_model="t", run_meta=run_meta)
 
 
@@ -432,11 +432,12 @@ def test_verify_search_exhausted_raises():
 
 
 def test_verify_bad_json_raises():
+    """Two consecutive bad-JSON responses (retry-once exhausted) raise."""
     claim = _make_claim()
     hits = [SearchHit(title="x", url="https://ex.com/e", snippet="text",
                      provider="ddg")]
     search = _StubSearch(default_hits=hits)
-    stub = _StubOllama(["not json"])
+    stub = _StubOllama(["not json 1", "not json 2"])
     run_meta: dict = {}
     with pytest.raises(FactCheckError, match="non-JSON output"):
         _verify_claim(claim, ollama_client=stub, ollama_model="t",
@@ -582,3 +583,102 @@ def test_build_search_query_uses_entities_and_truncates():
     assert "Bob" in q
     # No mid-word truncation (word-boundary respected).
     assert not q.rstrip().endswith("A very long claim A very long clai")
+
+
+# --- 9. Post-review hardening (H1, M1, L1, L5) ----------------------------
+
+
+def test_extract_retries_once_on_bad_json_then_succeeds():
+    """H1: bad JSON on first attempt, valid JSON on second attempt."""
+    source = "The Eiffel Tower is located in Paris today always."
+    good = json.dumps({
+        "claims": [
+            {"text": "The Eiffel Tower is located in Paris",
+             "claim_type": "event", "entities": []}
+        ]
+    })
+    stub = _StubOllama(["not json at all", good])
+    run_meta: dict = {}
+    claims = _extract_claims(source, ollama_client=stub, ollama_model="t",
+                             run_meta=run_meta)
+    assert len(claims) == 1
+    assert stub.call_count == 2
+
+
+def test_extract_gives_up_after_retry():
+    """H1: two consecutive bad-JSON responses still raise."""
+    stub = _StubOllama(["nope 1", "nope 2"])
+    run_meta: dict = {}
+    with pytest.raises(FactCheckError, match="after 2 attempt"):
+        _extract_claims("source", ollama_client=stub, ollama_model="t",
+                        run_meta=run_meta)
+    assert stub.call_count == 2
+
+
+def test_verify_retries_once_on_bad_json_then_succeeds():
+    """H1: verify stage also retries once."""
+    claim = _make_claim()
+    hits = [SearchHit(title="Eiffel", url="https://ex.com/e",
+                     snippet="The Eiffel Tower is in Paris.", provider="ddg")]
+    search = _StubSearch(default_hits=hits)
+    good = json.dumps({
+        "verdict": "supported", "confidence": "high",
+        "explanation": "ok",
+        "evidence": [{"quoted_text": "The Eiffel Tower is in Paris.",
+                      "source_url": "https://ex.com/e"}],
+    })
+    stub = _StubOllama(["not json", good])
+    run_meta: dict = {}
+    v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
+                     search_client=search, max_search_results=5,
+                     run_meta=run_meta)
+    assert v.verdict == "supported"
+    assert stub.call_count == 2
+
+
+def test_load_nonexistent_path_instance_raises(tmp_path):
+    """M1: a Path instance pointing at a nonexistent file must raise,
+    not silently downgrade to raw text."""
+    ghost = tmp_path / "does_not_exist.mp3"
+    with pytest.raises(FactCheckError, match="does not exist"):
+        _load_source(ghost)
+
+
+def test_load_str_that_is_not_a_path_still_becomes_text():
+    """M1 regression guard: a plain string that happens not to name a
+    file should still become text (not raise)."""
+    src, text = _load_source("The Eiffel Tower is in Paris.")
+    assert src.kind == "text"
+    assert text == "The Eiffel Tower is in Paris."
+
+
+def test_ollama_response_text_none_content_raises():
+    """L1: an object-shaped response with .message.content == None
+    must raise FactCheckError, not return None."""
+    resp = types.SimpleNamespace(
+        message=types.SimpleNamespace(content=None)
+    )
+    with pytest.raises(FactCheckError, match="missing message.content"):
+        _agent._ollama_response_text(resp)
+
+
+def test_ollama_response_text_empty_content_raises():
+    """L1 corollary: empty string is treated the same as missing."""
+    resp = {"message": {"content": ""}}
+    with pytest.raises(FactCheckError, match="missing message.content"):
+        _agent._ollama_response_text(resp)
+
+
+def test_search_query_capped_at_400_chars():
+    """L5: even a claim with many long entities must produce a query
+    under the shared _MAX_SEARCH_QUERY_LEN cap."""
+    claim = FactualClaim(
+        claim_id="c1",
+        text="A short claim about a specific topic and more content here.",
+        claim_type="other",
+        entities=["Entity Name " * 50] * 3,  # each entity ~600 chars
+    )
+    q = _build_search_query(claim)
+    assert len(q) <= 400
+    # Word-boundary truncation.
+    assert not q.endswith("Entity Nam")

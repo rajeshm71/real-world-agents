@@ -88,6 +88,9 @@ _TEXT_SUFFIXES = (".md", ".txt")
 _EXTRACT_PROMPT_PATH = Path(__file__).parent / "prompts" / "extract.txt"
 _VERIFY_PROMPT_PATH = Path(__file__).parent / "prompts" / "verify.txt"
 
+_MAX_SEARCH_QUERY_LEN = 400  # Tavily / Brave both cap around this.
+_JSON_PARSE_RETRIES = 1
+
 
 # --- Error type ------------------------------------------------------------
 
@@ -145,22 +148,23 @@ def _load_source(
         text = _transcribe_via_podcast_processor(source_str, is_url=True,
                                                  _whisper_model=_whisper_model)
         return InputSource(kind="youtube", url=source_str), text
+
+    # A caller who passed a Path instance clearly expected a file, not
+    # text. Refuse to silently downgrade a nonexistent Path to raw text
+    # (a real UX bug: typo'd paths would become 30-char "transcripts").
+    if isinstance(source, Path):
+        if not source.exists() or not source.is_file():
+            raise FactCheckError(
+                f"file {source_str!r} does not exist or is not a regular file.",
+                partial=FactCheckAttempt(stage="load"),
+            )
+        return _load_existing_path(source, _whisper_model=_whisper_model)
+
+    # `source` is a str: could be a real path OR raw text. Only treat
+    # as a path if the string actually resolves to a file on disk.
     path = Path(source_str)
     if path.exists() and path.is_file():
-        suffix = path.suffix.lower()
-        if suffix in _AUDIO_SUFFIXES:
-            text = _transcribe_via_podcast_processor(source_str, is_url=False,
-                                                     _whisper_model=_whisper_model)
-            return InputSource(kind="audio", path=path.resolve()), text
-        if suffix in _TEXT_SUFFIXES:
-            text = path.read_text(encoding="utf-8", errors="replace")
-            return InputSource(kind="transcript_file", path=path.resolve()), text
-        raise FactCheckError(
-            f"unsupported file suffix {suffix!r}; use audio "
-            f"{list(_AUDIO_SUFFIXES)}, text {list(_TEXT_SUFFIXES)}, or a "
-            "raw string.",
-            partial=FactCheckAttempt(stage="load"),
-        )
+        return _load_existing_path(path, _whisper_model=_whisper_model)
     # Fall through: treat as raw text.
     if not source_str.strip():
         raise FactCheckError(
@@ -168,6 +172,25 @@ def _load_source(
             partial=FactCheckAttempt(stage="load"),
         )
     return InputSource(kind="text", raw_text=source_str), source_str
+
+
+def _load_existing_path(
+    path: Path, *, _whisper_model: Any = None
+) -> tuple[InputSource, str]:
+    suffix = path.suffix.lower()
+    if suffix in _AUDIO_SUFFIXES:
+        text = _transcribe_via_podcast_processor(str(path), is_url=False,
+                                                 _whisper_model=_whisper_model)
+        return InputSource(kind="audio", path=path.resolve()), text
+    if suffix in _TEXT_SUFFIXES:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return InputSource(kind="transcript_file", path=path.resolve()), text
+    raise FactCheckError(
+        f"unsupported file suffix {suffix!r}; use audio "
+        f"{list(_AUDIO_SUFFIXES)}, text {list(_TEXT_SUFFIXES)}, or a "
+        "raw string.",
+        partial=FactCheckAttempt(stage="load"),
+    )
 
 
 def _transcribe_via_podcast_processor(
@@ -243,6 +266,63 @@ _CLAIMS_SCHEMA: dict = {
 }
 
 
+def _ollama_json_call(
+    *,
+    ollama_client: Any,
+    ollama_model: str,
+    messages: list[dict],
+    schema: dict,
+    stage: str,
+    claim_id: str | None = None,
+) -> tuple[dict, str]:
+    """Ollama structured-output call with retry-once-on-bad-JSON.
+
+    Returns (parsed_data, last_raw_text). Small local models
+    occasionally emit malformed JSON even under a schema constraint;
+    the second attempt appends the parse error to the last message so
+    the model can correct itself. Mirrors #10's / #14's retry-once
+    pattern."""
+    last_raw = ""
+    last_error = ""
+    working_messages = list(messages)
+    for attempt in range(_JSON_PARSE_RETRIES + 1):
+        try:
+            resp = ollama_client.chat(
+                model=ollama_model,
+                messages=working_messages,
+                format=schema,
+                options={"temperature": 0.0},
+            )
+        except Exception as exc:
+            raise _translate_llm_error(exc, stage=stage, claim_id=claim_id) from exc
+        last_raw = _ollama_response_text(resp)
+        try:
+            return json.loads(last_raw), last_raw
+        except json.JSONDecodeError as exc:
+            last_error = str(exc)
+            if attempt >= _JSON_PARSE_RETRIES:
+                raise FactCheckError(
+                    f"Ollama returned non-JSON output at stage {stage!r} "
+                    f"after {attempt + 1} attempt(s): {last_error}",
+                    partial=FactCheckAttempt(
+                        stage=stage, claim_id=claim_id, raw_output=last_raw  # type: ignore[arg-type]
+                    ),
+                ) from exc
+            working_messages = list(messages) + [
+                {
+                    "role": "user",
+                    "content": (
+                        f"Your previous response could not be parsed as JSON: "
+                        f"{last_error}. Return valid JSON matching the schema."
+                    ),
+                }
+            ]
+    raise FactCheckError(  # unreachable
+        f"retry loop at stage {stage!r} exited without a result.",
+        partial=FactCheckAttempt(stage=stage, claim_id=claim_id),  # type: ignore[arg-type]
+    )
+
+
 def _extract_claims(
     source_text: str,
     *,
@@ -252,26 +332,16 @@ def _extract_claims(
 ) -> list[FactualClaim]:
     system_prompt = _load_extract_prompt()
     user_prompt = f"Source text:\n\n{source_text}"
-    try:
-        resp = ollama_client.chat(
-            model=ollama_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            format=_CLAIMS_SCHEMA,
-            options={"temperature": 0.0},
-        )
-    except Exception as exc:
-        raise _translate_llm_error(exc, stage="extract") from exc
-    raw_text = _ollama_response_text(resp)
-    try:
-        data = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise FactCheckError(
-            f"Ollama returned non-JSON output during claim extraction: {exc}",
-            partial=FactCheckAttempt(stage="extract", raw_output=raw_text),
-        ) from exc
+    data, _raw = _ollama_json_call(
+        ollama_client=ollama_client,
+        ollama_model=ollama_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        schema=_CLAIMS_SCHEMA,
+        stage="extract",
+    )
     raw_claims = data.get("claims", [])
     claims: list[FactualClaim] = []
     drops: list[str] = []
@@ -354,7 +424,14 @@ def _verify_claim(
     provider_used = getattr(search_client, "last_used_provider", None) or getattr(
         search_client, "provider_name", "ddg"
     )
-    hits_by_url = {h.url: h for h in hits if h.url}
+    # Key by URL, keeping the FIRST hit per URL. Two hits with the
+    # same URL (rare, but possible after a chain fallback) would
+    # otherwise let the second silently shadow the first, making an
+    # evidence quote from the first snippet unreachable.
+    hits_by_url_first: dict[str, SearchHit] = {}
+    for h in hits:
+        if h.url and h.url not in hits_by_url_first:
+            hits_by_url_first[h.url] = h
 
     if not hits:
         return ClaimVerdict(
@@ -367,37 +444,24 @@ def _verify_claim(
 
     system_prompt = _load_verify_prompt()
     user_prompt = _format_verify_prompt(claim, hits)
-    try:
-        resp = ollama_client.chat(
-            model=ollama_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            format=_VERDICT_SCHEMA,
-            options={"temperature": 0.0},
-        )
-    except Exception as exc:
-        raise _translate_llm_error(
-            exc, stage="verify", claim_id=claim.claim_id
-        ) from exc
-    raw_text = _ollama_response_text(resp)
-    try:
-        data = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise FactCheckError(
-            f"Ollama returned non-JSON output while verifying {claim.claim_id!r}: {exc}",
-            partial=FactCheckAttempt(
-                stage="verify", claim_id=claim.claim_id, raw_output=raw_text
-            ),
-        ) from exc
+    data, raw_text = _ollama_json_call(
+        ollama_client=ollama_client,
+        ollama_model=ollama_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        schema=_VERDICT_SCHEMA,
+        stage="verify",
+        claim_id=claim.claim_id,
+    )
 
     evidence_out: list[EvidenceSnippet] = []
     evidence_drops: list[str] = []
     for ev in data.get("evidence", []):
         quoted = (ev.get("quoted_text") or "").strip()
         url = (ev.get("source_url") or "").strip()
-        hit = hits_by_url.get(url)
+        hit = hits_by_url_first.get(url)
         if hit is None or not quoted:
             evidence_drops.append(f"orphan or empty: {url!r}")
             continue
@@ -459,8 +523,15 @@ def _build_search_query(claim: FactualClaim) -> str:
     else:
         truncated = text
     if claim.entities:
-        return " ".join(claim.entities) + " " + truncated
-    return truncated
+        query = " ".join(claim.entities) + " " + truncated
+    else:
+        query = truncated
+    # Cap total query length -- Tavily / Brave both reject around 400+
+    # chars and a spuriously long entity list would otherwise bomb the
+    # search call.
+    if len(query) > _MAX_SEARCH_QUERY_LEN:
+        query = query[:_MAX_SEARCH_QUERY_LEN].rsplit(" ", 1)[0]
+    return query
 
 
 def _format_verify_prompt(claim: FactualClaim, hits: list[SearchHit]) -> str:
@@ -486,16 +557,18 @@ def _format_verify_prompt(claim: FactualClaim, hits: list[SearchHit]) -> str:
 def _ollama_response_text(resp: Any) -> str:
     """Extract the message text from an Ollama chat response. Handles
     both dict-shaped (ollama<0.4) and object-shaped (ollama>=0.4)
-    responses defensively."""
+    responses defensively; raises FactCheckError when `content` is
+    missing, None, or empty (some server error paths return an
+    object with .message.content == None instead of raising)."""
     msg = getattr(resp, "message", None)
     if msg is not None:
         content = getattr(msg, "content", None)
-        if content is not None:
+        if isinstance(content, str) and content:
             return content
     if isinstance(resp, dict):
         message = resp.get("message") or {}
         content = message.get("content")
-        if content is not None:
+        if isinstance(content, str) and content:
             return content
     raise FactCheckError(
         f"Ollama response missing message.content: {type(resp).__name__}"
@@ -700,10 +773,10 @@ def _mock_report(source: str | Path) -> FactCheckReport:
     claim_c = FactualClaim(
         claim_id="c002",
         text=_pick_snippet(source_text,
-                           "our company launched a product used by three private customers",
+                           "our internal team launched a research prototype",
                            "Unverifiable private anecdote goes here"),
         claim_type="statistic",
-        entities=["private customers"],
+        entities=["internal team", "research prototype"],
     )
     verdicts = [
         ClaimVerdict(
@@ -765,7 +838,7 @@ def _mock_report(source: str | Path) -> FactCheckReport:
 
 def _pick_snippet(source_text: str, preferred: str, fallback: str) -> str:
     """If `preferred` appears verbatim in source_text, return it; else
-    return the first 80 chars of source_text (guaranteed substring) or
+    return the first 120 chars of source_text (guaranteed substring) or
     a padded fallback if the source is too short."""
     if _substring_of_normalized(preferred, source_text):
         return preferred
