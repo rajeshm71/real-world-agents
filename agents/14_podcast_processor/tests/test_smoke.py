@@ -512,3 +512,76 @@ def test_supported_audio_suffixes():
 def test_sample_episode_exists():
     assert _SAMPLE.exists()
     assert _SAMPLE.stat().st_size > 1000
+
+
+# --- 8. Post-review hardening (H1, M1, M2, L1, L2) ------------------------
+
+
+def test_extract_text_no_text_blocks_attaches_partial():
+    """H1: an Anthropic response with no text blocks (refusal, tool-use
+    only, etc.) must raise PodcastError with a partial carrying the
+    transcript, not a bare error message."""
+    empty_response = types.SimpleNamespace(content=[])
+    tr = _sample_transcript()
+    with pytest.raises(PodcastError) as exc_info:
+        _agent._extract_text(empty_response, transcript=tr)
+    assert exc_info.value.partial is not None
+    assert exc_info.value.partial.stage == "structure"
+    assert exc_info.value.partial.transcript is tr
+
+
+def test_transcribe_narrow_catch_reports_segment_validation_distinctly(tmp_path):
+    """M1: a Whisper segment with end<=start must surface a distinct
+    error, not be mislabeled as 'faster-whisper failed'."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF")
+    src = AudioSource(path=audio, origin="local")
+    # Stub emits a bad segment: end == start.
+    stub = _StubWhisper(
+        segments=[{"start": 0.0, "end": 0.0, "text": "oops"}],
+        duration=1.0,
+    )
+    with pytest.raises(PodcastError, match="failed schema validation"):
+        _transcribe(src, whisper_size="small", compute_type="int8",
+                    device="cpu", _whisper_model=stub)
+
+
+def test_transcribe_strips_leading_spaces_from_segments(tmp_path):
+    """M2: Whisper segments often start with a leading space; the
+    joined full_text should not have double-space runs."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF")
+    src = AudioSource(path=audio, origin="local")
+    stub = _StubWhisper(
+        segments=[
+            {"start": 0.0, "end": 5.0, "text": " hello"},
+            {"start": 5.0, "end": 10.0, "text": " world"},
+        ],
+        duration=10.0,
+    )
+    t = _transcribe(src, whisper_size="small", compute_type="int8",
+                    device="cpu", _whisper_model=stub)
+    assert "  " not in t.full_text
+
+
+def test_zero_segments_error_mentions_vad(tmp_path):
+    """L1: the zero-segments message must call out the VAD-filter case
+    since our shipped sample_episode.wav triggers exactly that path."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF")
+    src = AudioSource(path=audio, origin="local")
+    stub = _StubWhisper(segments=[], duration=3.0)
+    with pytest.raises(PodcastError, match="VAD filter"):
+        _transcribe(src, whisper_size="small", compute_type="int8",
+                    device="cpu", _whisper_model=stub)
+
+
+def test_mock_result_with_url_source_uses_friendly_stem(monkeypatch):
+    """L2: passing a URL to the mock (unusual but legal) should
+    produce a friendly title and mark the AudioSource as youtube, not
+    an ugly `watch?v=xyz` stem stuffed into a `local` source."""
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    r = process_episode("https://youtube.com/watch?v=xyz")
+    assert "watch?v" not in r.structure.title
+    assert r.source.origin == "youtube"
+    assert r.source.url == "https://youtube.com/watch?v=xyz"

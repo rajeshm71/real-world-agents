@@ -193,27 +193,42 @@ def _transcribe(
         segments_iter, info = model.transcribe(
             str(source.path), beam_size=1, vad_filter=True
         )
-        segments = [
-            TranscriptSegment(
-                start_seconds=float(seg.start),
-                end_seconds=float(seg.end),
-                text=seg.text,
-            )
-            for seg in segments_iter
-        ]
+        raw_segments = list(segments_iter)
     except Exception as exc:
         raise PodcastError(
             f"faster-whisper failed on {source.path.name!r}: "
             f"{type(exc).__name__}: {exc}.",
             partial=ProcessAttempt(stage="transcribe"),
         ) from exc
+    try:
+        segments = [
+            TranscriptSegment(
+                start_seconds=float(seg.start),
+                end_seconds=float(seg.end),
+                text=seg.text,
+            )
+            for seg in raw_segments
+        ]
+    except ValidationError as exc:
+        # Whisper very occasionally emits a segment with end<=start on
+        # very short clips; surface this as a distinct failure so a
+        # reader is not misled into thinking faster-whisper itself
+        # crashed.
+        raise PodcastError(
+            f"faster-whisper emitted a segment that failed schema "
+            f"validation (e.g. end<=start on very short audio): {exc}",
+            partial=ProcessAttempt(stage="transcribe"),
+        ) from exc
     if not segments:
         raise PodcastError(
             f"faster-whisper produced zero segments for {source.path.name!r}; "
-            "the audio may be silent or corrupt.",
+            "the audio may be silent, contain no detectable speech (VAD "
+            "filter removed everything), or be corrupt.",
             partial=ProcessAttempt(stage="transcribe"),
         )
-    full_text = " ".join(s.text for s in segments)
+    # Strip per-segment whitespace so a leading space from Whisper
+    # doesn't double up with the join separator and inflate token cost.
+    full_text = " ".join(s.text.strip() for s in segments)
     return Transcript(
         segments=segments,
         duration_seconds=float(info.duration),
@@ -282,7 +297,7 @@ def _structure_transcript(
                     transcript=transcript,
                 ),
             ) from exc
-        last_raw = _extract_text(response)
+        last_raw = _extract_text(response, transcript=transcript)
         try:
             return _parse_and_validate(last_raw)
         except (json.JSONDecodeError, ValidationError) as exc:
@@ -303,12 +318,18 @@ def _structure_transcript(
     )
 
 
-def _extract_text(response: Any) -> str:
+def _extract_text(response: Any, *, transcript: Transcript | None = None) -> str:
     """Anthropic returns a list of content blocks; the JSON is in the
-    first TextBlock. Empty content is a real error state."""
+    first TextBlock. Empty content is a real error state -- attach a
+    partial so the caller can see the transcript context that led to
+    it."""
     text_blocks = [b.text for b in response.content if getattr(b, "type", None) == "text"]
     if not text_blocks:
-        raise PodcastError("Anthropic response had no text content blocks.")
+        raise PodcastError(
+            "Anthropic response had no text content blocks (may be a "
+            "refusal or a tool-use-only response).",
+            partial=ProcessAttempt(stage="structure", transcript=transcript),
+        )
     return text_blocks[0]
 
 
@@ -456,7 +477,10 @@ def _mock_result(source: str | Path) -> PodcastResult:
     """Scripted PodcastResult without touching yt-dlp / faster-whisper /
     anthropic. Title echoes the source stem as the anti-refactor guard."""
     source_path = Path(str(source))
-    stem = source_path.stem or "episode"
+    if _URL_RE.match(str(source)):
+        stem = "url_episode"
+    else:
+        stem = source_path.stem or "episode"
 
     segments = [
         TranscriptSegment(
@@ -505,11 +529,12 @@ def _mock_result(source: str | Path) -> PodcastResult:
         ],
     )
 
+    is_url = _URL_RE.match(str(source)) is not None
     return PodcastResult(
         source=AudioSource(
             path=(source_path.resolve() if source_path.exists() else source_path),
-            origin="local",
-            url=None,
+            origin="youtube" if is_url else "local",
+            url=str(source) if is_url else None,
         ),
         transcript=transcript,
         structure=structure,
