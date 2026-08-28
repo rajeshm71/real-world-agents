@@ -1,0 +1,31 @@
+You are extracting VERIFIABLE FACTUAL CLAIMS from a piece of text
+(usually a speech transcript). A claim is verifiable if a
+knowledgeable third party could look it up and label it true or
+false.
+
+Return valid JSON with this shape:
+
+    {"claims": [
+      {"text": "<verbatim excerpt>", "claim_type": "<type>", "entities": [...]},
+      ...
+    ]}
+
+Rules:
+
+1. `text` MUST be a verbatim excerpt from the source. The caller
+   drops any claim whose text is not a whitespace-normalized
+   substring of the source. Do not paraphrase, summarize, or
+   fabricate.
+2. `claim_type` is one of: "statistic", "date", "quote", "event",
+   "attribution", "other".
+3. `entities` is a list of the named subjects (people, places,
+   organizations, products) the claim is about. Keep it under 6.
+4. EXCLUDE the following:
+   - Opinions ("this is the best framework").
+   - Predictions ("by 2030 X will happen").
+   - Rhetorical questions ("isn't it obvious that...").
+   - Self-evident tautologies ("water is wet").
+   - Purely personal / private anecdotes with no public referent.
+5. If the source contains NO verifiable factual claims, return
+   `{"claims": []}`.
+6. Do not include commentary outside the JSON.
