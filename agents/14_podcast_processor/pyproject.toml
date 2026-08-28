@@ -1,0 +1,33 @@
+[project]
+name = "podcast-processor"
+version = "0.1.0"
+description = "Agent #14: podcast episode processor. Local file or YouTube URL -> local faster-whisper transcript -> Anthropic-generated chapters + summary + verbatim-verified key quotes."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # workspace: common.llm / common.pricing
+    # Anthropic for the structuring step (chapters + summary from
+    # transcript). Same pin as #02/#10.
+    "anthropic>=0.121",
+    # Local Whisper via CTranslate2. ~200 MB wheel; downloads the
+    # ~1 GB model on first use into ~/.cache/huggingface/hub/.
+    # Verified 1.2.1 on PyPI 2026-08-28.
+    "faster-whisper>=1.2.1",
+    # YouTube audio-only download. Verified 2026.8.19 on PyPI
+    # 2026-08-28.
+    "yt-dlp>=2026.8.19",
+    "pydantic>=2.5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
