@@ -1,19 +1,30 @@
 """LLM adapter for real-world-agents.
 
 `LLM.complete()` returns an `LLMResponse` with text, token counts,
-cached-token count (for prompt-caching cost tracking), and latency. Four
+cached-token count (for prompt-caching cost tracking), and latency. Five
 concrete implementations ship here: `OpenAILLM`, `AnthropicLLM`, `GeminiLLM`,
-and `MockLLM` (deterministic, used in CI per CONTRIBUTING.md's R8 -- CI never
-touches a real API key, for any provider).
+`OllamaLLM` (local, no API key required), and `MockLLM` (deterministic, used
+in CI per CONTRIBUTING.md's R8 -- CI never touches a real API key, for any
+provider).
 
 Provider + model are both user-configurable via env vars (never hardcoded to
 one provider) -- this project is OSS and every user brings their own key(s).
-`LLM_PROVIDER` picks openai (default) / anthropic / gemini / mock.
-`OPENAI_DEFAULT_MODEL` / `ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`
-override the per-provider default model string -- see `DEFAULT_MODELS` below.
-None of this requires an API key to develop or run tests against; a key is
-only needed for an actual non-mock call, which is the end user's job, not a
-development-time requirement.
+`LLM_PROVIDER` picks openai / anthropic / gemini / ollama / mock. When
+`LLM_PROVIDER` is UNSET, `get_llm()` autodetects: the first cloud provider
+whose *_API_KEY env var is non-empty wins; if none are set, falls back to
+`OllamaLLM` (local, offline, free -- requires `ollama serve` + `ollama pull
+gemma4:e4b`, but no cloud spend and no key). This makes the project truly
+key-optional for OSS users: install Ollama once and every agent that routes
+through this module works out of the box.
+
+Note: this changes the pre-Phase-1 behavior where an unset `LLM_PROVIDER`
+silently meant "openai" and produced a raw auth error if the user hadn't
+set `OPENAI_API_KEY`. Explicitly setting `LLM_PROVIDER=openai` preserves the
+old behavior.
+
+`OPENAI_DEFAULT_MODEL` / `ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL` /
+`OLLAMA_DEFAULT_MODEL` override the per-provider default model string -- see
+`DEFAULT_MODELS` below.
 
 Ported from sibling rag-recipes' recipes/llm.py. The main deviation is the env
 var name: `LLM_PROVIDER` (this project) instead of `RAG_RECIPES_LLM` -- cleaner
@@ -30,6 +41,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -422,6 +434,16 @@ class MockLLM:
 
 
 _FALLBACK_BANNER_SHOWN = False
+_FALLBACK_BANNER_LOCK = threading.Lock()
+
+
+def _reset_fallback_banner_state() -> None:
+    """Test-only: clear the once-per-process banner flag so a test can
+    assert the banner fires. Not part of the public API; if you find
+    yourself calling this from production code, something is wrong."""
+    global _FALLBACK_BANNER_SHOWN
+    with _FALLBACK_BANNER_LOCK:
+        _FALLBACK_BANNER_SHOWN = False
 
 
 def _autodetect_provider() -> str:
@@ -445,20 +467,25 @@ def _autodetect_provider() -> str:
 def _log_ollama_fallback_banner() -> None:
     """Once-per-process stderr banner telling the user we picked the
     local-Ollama fallback because no API keys were set. Suppressed
-    when NO_FALLBACK_BANNER=1 (useful for tests / CI-like runs)."""
+    when NO_FALLBACK_BANNER=1 (useful for tests / CI-like runs).
+
+    Thread-safe: multiple concurrent get_llm() calls (as happen in
+    Gradio UIs) coordinate via a module-level Lock so the banner
+    prints exactly once even under contention."""
     global _FALLBACK_BANNER_SHOWN
-    if _FALLBACK_BANNER_SHOWN:
-        return
-    if os.environ.get("NO_FALLBACK_BANNER") == "1":
+    with _FALLBACK_BANNER_LOCK:
+        if _FALLBACK_BANNER_SHOWN:
+            return
+        if os.environ.get("NO_FALLBACK_BANNER") == "1":
+            _FALLBACK_BANNER_SHOWN = True
+            return
+        print(
+            "[real-world-agents] no *_API_KEY env vars found; falling back to "
+            f"local Ollama with model={DEFAULT_MODELS['ollama']!r}. "
+            "Set LLM_PROVIDER explicitly to silence this.",
+            file=sys.stderr,
+        )
         _FALLBACK_BANNER_SHOWN = True
-        return
-    print(
-        "[real-world-agents] no *_API_KEY env vars found; falling back to "
-        f"local Ollama with model={DEFAULT_MODELS['ollama']!r}. "
-        "Set LLM_PROVIDER explicitly to silence this.",
-        file=sys.stderr,
-    )
-    _FALLBACK_BANNER_SHOWN = True
 
 
 def get_llm(provider: str | None = None) -> LLM:
@@ -493,8 +520,16 @@ def get_llm(provider: str | None = None) -> LLM:
 # Convenience aliases for agents that specifically need one provider (e.g.
 # the receipt extractor's vision step). Under mock, every one of these
 # returns the same MockLLM class (R8 applies to every provider, not just
-# OpenAI) -- `provider` param lets an agent force a non-default provider
+# OpenAI) -- the `provider` param lets an agent force a non-default provider
 # while still honoring LLM_PROVIDER=mock in CI.
+#
+# These force-specific-provider helpers DELIBERATELY do NOT run the
+# `get_llm()` autodetect-and-fall-back-to-Ollama logic. Callers that reach
+# for these need the specific SDK (Anthropic vision on #01, long-context
+# on #10/#14, Gemini vision on #01/#09), and silently substituting Ollama
+# would break the intended semantics. If the required key is missing,
+# the underlying SDK raises its own auth error -- that's the honest
+# signal the caller can either set the right key or switch to LLM_PROVIDER=mock.
 def get_anthropic_llm() -> LLM:
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider == "mock":

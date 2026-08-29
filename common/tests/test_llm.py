@@ -17,6 +17,7 @@ from common.llm import (
     OllamaLLM,
     OpenAILLM,
     _autodetect_provider,
+    _reset_fallback_banner_state,
     get_anthropic_llm,
     get_gemini_llm,
     get_llm,
@@ -363,3 +364,53 @@ def test_ollama_in_default_models_registry():
     'ollama' so `resolve_model('ollama')` works out of the box."""
     assert "ollama" in DEFAULT_MODELS
     assert resolve_model("ollama") == DEFAULT_MODELS["ollama"]
+
+
+def test_ollama_llm_translates_connection_refused_to_friendly_error(monkeypatch):
+    """The single highest-value UX in the Ollama fallback: when the
+    server isn't running, the user gets an actionable hint pointing
+    at `ollama serve` and `ollama pull`, not a raw httpx traceback."""
+
+    class _Completions:
+        @staticmethod
+        def create(**_kw):
+            raise ConnectionError("connection refused")
+
+    class _Chat:
+        completions = _Completions
+
+    class _StubClient:
+        chat = _Chat()
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", lambda **_kw: _StubClient())
+
+    llm = OllamaLLM()
+    with pytest.raises(RuntimeError, match="ollama serve"):
+        llm.complete(prompt="hi", model="test")
+
+
+def test_reset_fallback_banner_state_lets_banner_fire_again(monkeypatch, capsys):
+    """`_reset_fallback_banner_state` is the test-isolation hook that
+    lets a test verify the banner-fires-once behavior without being
+    poisoned by whatever earlier test hit it first."""
+    # Baseline: fire the banner (allowed), verify it went out.
+    monkeypatch.delenv("NO_FALLBACK_BANNER", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    _reset_fallback_banner_state()
+    _autodetect_provider()
+    err1 = capsys.readouterr().err
+    assert "falling back to local Ollama" in err1
+
+    # Second call in the same process is silent (once-per-process).
+    _autodetect_provider()
+    err2 = capsys.readouterr().err
+    assert err2 == ""
+
+    # After reset, banner fires again.
+    _reset_fallback_banner_state()
+    _autodetect_provider()
+    err3 = capsys.readouterr().err
+    assert "falling back to local Ollama" in err3
