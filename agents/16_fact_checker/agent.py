@@ -87,6 +87,7 @@ _TEXT_SUFFIXES = (".md", ".txt")
 
 _EXTRACT_PROMPT_PATH = Path(__file__).parent / "prompts" / "extract.txt"
 _VERIFY_PROMPT_PATH = Path(__file__).parent / "prompts" / "verify.txt"
+_TRIAGE_PROMPT_PATH = Path(__file__).parent / "prompts" / "triage.txt"
 
 _MAX_SEARCH_QUERY_LEN = 400  # Tavily / Brave both cap around this.
 _JSON_PARSE_RETRIES = 1
@@ -137,6 +138,59 @@ def _load_extract_prompt() -> str:
 @functools.lru_cache(maxsize=1)
 def _load_verify_prompt() -> str:
     return _VERIFY_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+@functools.lru_cache(maxsize=1)
+def _load_triage_prompt() -> str:
+    return _TRIAGE_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+_TRIAGE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "needs_search": {"type": "boolean"},
+        "verdict": {
+            "type": ["string", "null"],
+            "enum": ["supported", "contradicted", None],
+        },
+        "confidence": {
+            "type": ["string", "null"],
+            "enum": ["high", "medium", "low", None],
+        },
+        "explanation": {"type": "string"},
+    },
+    "required": ["needs_search", "explanation"],
+}
+
+
+def _triage_claim(
+    claim: FactualClaim,
+    *,
+    ollama_client: Any,
+    ollama_model: str,
+) -> dict:
+    """Fast-path decision: can this claim be adjudicated from the
+    model's own knowledge, or does it need web search? Returns the
+    parsed triage response with keys: needs_search, verdict,
+    confidence, explanation."""
+    system_prompt = _load_triage_prompt()
+    user_prompt = (
+        f"Claim: {claim.text}\n"
+        f"Entities: {', '.join(claim.entities) if claim.entities else '(none)'}\n"
+        f"Claim type: {claim.claim_type}"
+    )
+    data, _raw = _ollama_json_call(
+        ollama_client=ollama_client,
+        ollama_model=ollama_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        schema=_TRIAGE_SCHEMA,
+        stage="verify",
+        claim_id=claim.claim_id,
+    )
+    return data
 
 
 # --- Stage A: load ---------------------------------------------------------
@@ -426,10 +480,43 @@ def _verify_claim(
     max_search_results: int,
     run_meta: dict[str, Any],
 ) -> ClaimVerdict:
-    # Two-pass search: first ground the model on what the entities
-    # are (so a post-cutoff term isn't judged as wrong just because
-    # the model doesn't recognize it), then search for the specific
-    # claim.
+    # Agentic fast path: ask the model whether this claim is
+    # answerable from well-established knowledge (2+2=4, capital of
+    # France, etc.). If YES with high confidence, skip the web
+    # searches entirely -- saves ~15-30s and 2 search calls per
+    # claim on the fast path.
+    triage = _triage_claim(
+        claim, ollama_client=ollama_client, ollama_model=ollama_model
+    )
+    decision = "no_search" if not triage.get("needs_search", True) else "web_search"
+    counts = run_meta.setdefault("triage_decisions", {"no_search": 0, "web_search": 0})
+    counts[decision] = counts.get(decision, 0) + 1
+    if (
+        not triage.get("needs_search", True)
+        and triage.get("verdict") in ("supported", "contradicted")
+        and triage.get("confidence") == "high"
+    ):
+        # Fast path: model self-attests high confidence on a
+        # universally-known fact. Skip search entirely.
+        try:
+            return ClaimVerdict(
+                claim=claim,
+                verdict=triage["verdict"],
+                confidence="high",
+                explanation=(
+                    (triage.get("explanation") or "").strip()
+                    + " [Adjudicated from model knowledge; no web search "
+                    "performed because this is a well-established fact.]"
+                ),
+                evidence=[],
+                verification_method="model_knowledge",
+            )
+        except ValidationError:
+            # Model's self-triage failed schema; fall through to
+            # search rather than raising.
+            pass
+
+    # Slow path: two-pass grounded web search + LLM adjudication.
     grounding_query = _build_grounding_query(claim)
     specific_query = _build_search_query(claim)
     all_hits: list[SearchHit] = []

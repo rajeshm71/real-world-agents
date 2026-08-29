@@ -91,21 +91,31 @@ class ClaimVerdict(BaseModel):
     confidence: Literal["high", "medium", "low"]
     explanation: str = Field(..., min_length=1)
     evidence: list[EvidenceSnippet] = Field(default_factory=list, max_length=5)
+    # How the verdict was reached. "model_knowledge" is the fast-path
+    # taken when a claim is answerable from well-established knowledge
+    # (basic math, universally-known facts) and skipping the web
+    # search saves real cost. "web_search" is the default.
+    verification_method: Literal["model_knowledge", "web_search"] = "web_search"
 
     @model_validator(mode="after")
-    def _strong_verdict_needs_evidence(self) -> ClaimVerdict:
+    def _strong_verdict_evidence_matches_method(self) -> ClaimVerdict:
         if self.verdict in ("supported", "contradicted"):
-            if not self.evidence:
+            if self.verification_method == "web_search" and not self.evidence:
                 raise ValueError(
-                    f"verdict={self.verdict!r} requires at least one evidence "
-                    "snippet; a strong verdict without evidence is a "
-                    "hallucination."
+                    f"verdict={self.verdict!r} via web_search requires at "
+                    "least one evidence snippet; a strong verdict without "
+                    "evidence is a hallucination."
+                )
+            if self.verification_method == "model_knowledge" and self.evidence:
+                raise ValueError(
+                    "verification_method='model_knowledge' means no search "
+                    "was run, so evidence must be empty."
                 )
             if self.confidence == "low":
                 raise ValueError(
                     f"verdict={self.verdict!r} + confidence='low' is "
-                    "contradictory; downgrade the verdict to 'unclear' if the "
-                    "evidence is weak."
+                    "contradictory; downgrade the verdict to 'unclear' if "
+                    "the evidence is weak."
                 )
         return self
 
@@ -115,6 +125,22 @@ class ClaimVerdict(BaseModel):
             raise ValueError(
                 "verdict='unverifiable' means nothing was found; evidence "
                 "must be empty."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _model_knowledge_only_for_strong_verdicts(self) -> ClaimVerdict:
+        # The fast path is intentionally limited to supported/contradicted:
+        # if the model can't confidently take a side from its own
+        # knowledge, we WANT it to fall through to web search.
+        if self.verification_method == "model_knowledge" and self.verdict in (
+            "unclear",
+            "unverifiable",
+        ):
+            raise ValueError(
+                f"verification_method='model_knowledge' with verdict="
+                f"{self.verdict!r} is nonsensical: if the model is unsure, "
+                "the caller should have routed to web search instead."
             )
         return self
 

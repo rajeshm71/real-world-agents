@@ -62,12 +62,29 @@ _TRANSCRIPT = _AGENT_DIR / "examples" / "sample_transcript.md"
 # --- Helpers ---------------------------------------------------------------
 
 
+_TRIAGE_DEFER_TO_SEARCH = json.dumps({
+    "needs_search": True, "verdict": None, "confidence": None,
+    "explanation": "Deferring to web search for stub-based test.",
+})
+_TRIAGE_FAST_PATH_SUPPORTED = json.dumps({
+    "needs_search": False, "verdict": "supported", "confidence": "high",
+    "explanation": "Well-established fact.",
+})
+
+
 class _StubOllama:
     """Duck-typed Ollama client. `responses` is a list of JSON strings
-    the stub returns in order. Each call consumes one."""
+    the stub returns in order. Each call consumes one.
 
-    def __init__(self, responses):
+    Extract calls consume 1 response. Verify calls consume 2 (triage
+    + adjudicate) OR 1 (triage says needs_search=false, fast path).
+    The `auto_triage` flag (default True) prepends a
+    'defer to search' triage response before every verify-shaped
+    response so existing tests keep working without churn."""
+
+    def __init__(self, responses, auto_triage: bool = True):
         self._responses = list(responses)
+        self._auto_triage = auto_triage
         self.call_count = 0
 
     def chat(self, **kwargs):
@@ -378,11 +395,15 @@ def test_verify_returns_supported_verdict():
                       "source_url": "https://ex.com/e"}],
     })
     run_meta: dict = {}
-    v = _verify_claim(claim, ollama_client=_StubOllama([resp]),
+    # verify now calls triage FIRST; feed a defer-to-search response
+    # before the actual verify response.
+    v = _verify_claim(claim,
+                     ollama_client=_StubOllama([_TRIAGE_DEFER_TO_SEARCH, resp]),
                      ollama_model="t", search_client=search,
                      max_search_results=5, run_meta=run_meta)
     assert v.verdict == "supported"
     assert len(v.evidence) == 1
+    assert v.verification_method == "web_search"
 
 
 def test_verify_drops_non_verbatim_evidence():
@@ -399,7 +420,8 @@ def test_verify_drops_non_verbatim_evidence():
         ],
     })
     run_meta: dict = {}
-    v = _verify_claim(claim, ollama_client=_StubOllama([resp]),
+    v = _verify_claim(claim,
+                     ollama_client=_StubOllama([_TRIAGE_DEFER_TO_SEARCH, resp]),
                      ollama_model="t", search_client=search,
                      max_search_results=5, run_meta=run_meta)
     # Non-verbatim evidence dropped -> supported downgrades to unclear.
@@ -410,25 +432,74 @@ def test_verify_drops_non_verbatim_evidence():
 def test_verify_no_search_hits_produces_unverifiable():
     claim = _make_claim()
     search = _StubSearch(default_hits=[])
-    stub = _StubOllama([])  # never gets called on empty hits
+    stub = _StubOllama([_TRIAGE_DEFER_TO_SEARCH])
     run_meta: dict = {}
     v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
                      search_client=search, max_search_results=5,
                      run_meta=run_meta)
     assert v.verdict == "unverifiable"
     assert v.evidence == []
-    assert stub.call_count == 0
+    # 1 call for triage; verify-adjudicate is skipped because search
+    # returned nothing.
+    assert stub.call_count == 1
 
 
 def test_verify_search_exhausted_raises():
     claim = _make_claim()
     chain = ChainProvider([_RateLimitedProvider(), _RateLimitedProvider()])
-    stub = _StubOllama([])
+    stub = _StubOllama([_TRIAGE_DEFER_TO_SEARCH])
     run_meta: dict = {}
     with pytest.raises(FactCheckError, match="search chain exhausted"):
         _verify_claim(claim, ollama_client=stub, ollama_model="t",
                      search_client=chain, max_search_results=5,
                      run_meta=run_meta)
+
+
+def test_verify_fast_path_skips_search_on_well_known_fact():
+    """Agentic fast path: triage returns high-confidence verdict with
+    needs_search=false, so no web search or adjudicate call fires."""
+    claim = _make_claim(text="Two plus two equals four in basic arithmetic.")
+    search = _StubSearch(default_hits=[])
+    stub = _StubOllama([_TRIAGE_FAST_PATH_SUPPORTED])
+    run_meta: dict = {}
+    v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
+                     search_client=search, max_search_results=5,
+                     run_meta=run_meta)
+    assert v.verdict == "supported"
+    assert v.verification_method == "model_knowledge"
+    assert v.evidence == []
+    # Only triage consumed one call; no adjudicate.
+    assert stub.call_count == 1
+    # Search client was never invoked.
+    assert search.calls == []
+    # Fast-path count recorded.
+    assert run_meta["triage_decisions"]["no_search"] == 1
+
+
+def test_verify_low_confidence_triage_falls_through_to_search():
+    """Fast path requires confidence=high; medium/low must trigger search."""
+    claim = _make_claim()
+    hits = [SearchHit(title="x", url="https://ex.com/e",
+                     snippet="The Eiffel Tower is in Paris.", provider="ddg")]
+    search = _StubSearch(default_hits=hits)
+    triage_medium = json.dumps({
+        "needs_search": False, "verdict": "supported", "confidence": "medium",
+        "explanation": "I think so but I'd like to verify.",
+    })
+    adjudicate = json.dumps({
+        "verdict": "supported", "confidence": "high", "explanation": "yes",
+        "evidence": [{"quoted_text": "The Eiffel Tower is in Paris.",
+                      "source_url": "https://ex.com/e"}],
+    })
+    stub = _StubOllama([triage_medium, adjudicate])
+    run_meta: dict = {}
+    v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
+                     search_client=search, max_search_results=5,
+                     run_meta=run_meta)
+    # Search WAS invoked (fast path rejected because confidence!=high).
+    assert search.calls != []
+    assert v.verification_method == "web_search"
+    assert stub.call_count == 2
 
 
 def test_verify_bad_json_raises():
@@ -437,7 +508,8 @@ def test_verify_bad_json_raises():
     hits = [SearchHit(title="x", url="https://ex.com/e", snippet="text",
                      provider="ddg")]
     search = _StubSearch(default_hits=hits)
-    stub = _StubOllama(["not json 1", "not json 2"])
+    # Triage OK, then two consecutive bad JSON on adjudicate.
+    stub = _StubOllama([_TRIAGE_DEFER_TO_SEARCH, "not json 1", "not json 2"])
     run_meta: dict = {}
     with pytest.raises(FactCheckError, match="non-JSON output"):
         _verify_claim(claim, ollama_client=stub, ollama_model="t",
@@ -627,13 +699,15 @@ def test_verify_retries_once_on_bad_json_then_succeeds():
         "evidence": [{"quoted_text": "The Eiffel Tower is in Paris.",
                       "source_url": "https://ex.com/e"}],
     })
-    stub = _StubOllama(["not json", good])
+    # Triage OK, then bad-json + good on adjudicate retry.
+    stub = _StubOllama([_TRIAGE_DEFER_TO_SEARCH, "not json", good])
     run_meta: dict = {}
     v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
                      search_client=search, max_search_results=5,
                      run_meta=run_meta)
     assert v.verdict == "supported"
-    assert stub.call_count == 2
+    # 3 calls: 1 triage + 2 adjudicate (bad-json then retry).
+    assert stub.call_count == 3
 
 
 def test_load_nonexistent_path_instance_raises(tmp_path):
