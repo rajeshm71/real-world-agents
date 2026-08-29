@@ -414,3 +414,10 @@ def test_resolve_provider_rejects_garbage(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "not-a-real-provider")
     with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
         resolve_provider()
+
+
+def test_supported_providers_includes_ollama():
+    """Locks in local-Ollama fallback: LLM_PROVIDER=ollama routes the
+    crew's agents to a local Ollama server via LiteLLM's
+    'ollama_chat/' prefix inside CrewAI's LLM(...)."""
+    assert _agent.SUPPORTED_PROVIDERS == ("openai", "ollama")

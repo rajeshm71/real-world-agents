@@ -81,7 +81,12 @@ from common.llm import resolve_model
 
 # OpenAI-only for v1 (see module docstring). "mock" bypasses the SDK
 # entirely; anything else is treated as an OpenAI model ID.
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
+
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "ollama": "gemma4:e4b",
+}
 
 DEFAULT_MAX_TURNS = 15  # ReAct turn cap; beyond this the model is stuck
 MIN_NOTES_CHARS = 200  # below this, treat as not-a-real-meeting (R5 case 1)
@@ -313,7 +318,9 @@ def extract_action_items(
             "meeting notes or a transcript."
         )
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(
+        resolved_provider
+    ) or resolve_model(resolved_provider)
 
     # Lazy import: openai-agents pulls in openai + other deps. Mock
     # mode + notes-validation path should not require it installed.
@@ -325,7 +332,9 @@ def extract_action_items(
             "root, or `pip install openai-agents>=0.22`."
         ) from exc
 
-    agent = _agent if _agent is not None else _build_agent(model=resolved_model, notes=notes)
+    agent = _agent if _agent is not None else _build_agent(
+        model=resolved_model, notes=notes, provider=resolved_provider
+    )
 
     try:
         result = Runner.run_sync(agent, input=notes, max_turns=max_turns)
@@ -355,7 +364,7 @@ def extract_action_items(
 #     wiring via openai-agents' Agent / function_tool primitives) ---
 
 
-def _build_agent(*, model: str, notes: str):
+def _build_agent(*, model: str, notes: str, provider: str = "openai"):
     """Build the ReAct agent. `notes` is closed over so the 3-of-4
     tools that need it don't force the model to pass notes back on
     every call (would waste tokens and let the model paraphrase).
@@ -366,6 +375,22 @@ def _build_agent(*, model: str, notes: str):
     Lazy import: openai-agents is heavy; only pulled in on real-provider
     runs (mock path skips this factory entirely)."""
     from agents import Agent, function_tool
+
+    if provider == "ollama":
+        from agents.models.openai_chatcompletions import (
+            OpenAIChatCompletionsModel,
+        )
+        from openai import AsyncOpenAI
+
+        from common.llm import ollama_base_url
+        model_arg = OpenAIChatCompletionsModel(
+            model=model,
+            openai_client=AsyncOpenAI(
+                base_url=ollama_base_url(), api_key="ollama"
+            ),
+        )
+    else:
+        model_arg = model
 
     def extract_speakers() -> list[str]:
         """Return a list of speaker/participant names extracted from the
@@ -396,7 +421,7 @@ def _build_agent(*, model: str, notes: str):
     return Agent(
         name="meeting-notes-agent",
         instructions=_load_system_prompt(),
-        model=model,
+        model=model_arg,
         tools=[
             function_tool(extract_speakers),
             function_tool(extract_dates),
@@ -431,6 +456,16 @@ def _translate_api_error(exc: Exception) -> MeetingNotesError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
+    if (
+        "connection" in message_lower and "refused" in message_lower
+    ) or "connectionerror" in exc_class_name or (
+        "11434" in message_lower
+    ):
+        return MeetingNotesError(
+            "Ollama connection failed. Is 'ollama serve' running? "
+            "See https://ollama.com/download and run "
+            "`ollama pull gemma4:e4b` to fetch the default local model."
+        )
 
     return MeetingNotesError(
         f"Meeting-notes extraction failed: {type(exc).__name__}: {exc}. "

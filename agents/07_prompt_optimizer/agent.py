@@ -61,15 +61,18 @@ from common.llm import resolve_model
 
 # --- Provider + constants --------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
 # DSPy uses LiteLLM under the hood, which expects "<provider>/<model>"
 # strings. Same mapping shape agent #01 uses for Instructor's
 # from_provider() prefix. Only "gemini" differs from our env-var name
-# (LiteLLM calls it "gemini/", not "google/").
+# (LiteLLM calls it "gemini/", not "google/"). "ollama_chat" routes
+# through LiteLLM to Ollama's chat completions endpoint (supports
+# tool-calling; the older "ollama/" prefix does not).
 _LITELLM_PROVIDER_PREFIX = {
     "openai": "openai",
     "anthropic": "anthropic",
     "gemini": "gemini",
+    "ollama": "ollama_chat",
 }
 
 # Fields the target agent (#01) actually scores. Signature MUST NOT
@@ -304,7 +307,16 @@ def _build_program(*, dspy, provider: str, model: str, baseline_prompt: str):
     to work with and just add noise.
     """
     litellm_prefix = _LITELLM_PROVIDER_PREFIX[provider]
-    dspy.configure(lm=dspy.LM(f"{litellm_prefix}/{model}"))
+    lm_kwargs: dict = {}
+    if provider == "ollama":
+        # Pass api_base as a dspy.LM kwarg (LiteLLM forwards it to
+        # the ollama provider). Prefer this over mutating process
+        # env OLLAMA_API_BASE, which would leak to other agents in
+        # the same process.
+        from common.llm import ollama_base_url
+        # ollama's LiteLLM path wants the raw host, not /v1.
+        lm_kwargs["api_base"] = ollama_base_url().removesuffix("/v1")
+    dspy.configure(lm=dspy.LM(f"{litellm_prefix}/{model}", **lm_kwargs))
 
     # Signature docstring becomes the base instructions the optimizer
     # iterates on. Seeded with the current hand-written prompt so GEPA

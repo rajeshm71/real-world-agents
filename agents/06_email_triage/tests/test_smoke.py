@@ -346,3 +346,43 @@ def test_resolve_provider_rejects_garbage(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "not-real")
     with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
         resolve_provider()
+
+
+# --- Phase 2: local-Ollama fallback ---------------------------------------
+
+
+def test_supported_providers_includes_ollama():
+    assert _agent.SUPPORTED_PROVIDERS == ("openai", "ollama")
+
+
+def test_build_agent_ollama_uses_local_endpoint(monkeypatch):
+    """When provider="ollama" the Agent is built with an OllamaModel
+    pointing at the local Ollama server, not a string like
+    "openai:...". Capture the OllamaProvider constructor to verify
+    the base_url + sentinel API key."""
+    pytest.importorskip("pydantic_ai")
+    captured: dict = {}
+
+    from pydantic_ai.providers import ollama as _ollama_prov_mod
+    real_provider = _ollama_prov_mod.OllamaProvider
+
+    class _CapturingProvider(real_provider):
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(
+        _ollama_prov_mod, "OllamaProvider", _CapturingProvider
+    )
+
+    agent = _build_agent(model="gemma4:e4b", provider="ollama")
+    assert captured["base_url"].endswith("/v1")
+    assert "11434" in captured["base_url"]
+    assert captured["api_key"] == "ollama"
+    assert agent is not None
+
+
+def test_translate_api_error_connection_refused_returns_ollama_hint():
+    exc = ConnectionError("Connection refused: http://localhost:11434")
+    out = _translate_api_error(exc)
+    assert "ollama serve" in out.message.lower()

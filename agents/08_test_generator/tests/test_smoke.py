@@ -518,11 +518,11 @@ def test_max_turns_exceeded_result_is_valid_generated_test():
     assert "MaxTurnsExceeded" in result.final_result.stderr
 
 
-def test_supported_providers_is_openai_only_in_v1():
-    """Lock down: v1 stance is OpenAI-only. If a future release adds
-    LiteLLM support, this test fires as a reminder to also update the
-    README's provider notes."""
-    assert SUPPORTED_PROVIDERS == ("openai",)
+def test_supported_providers_includes_openai_and_ollama():
+    """Locks in the two supported provider paths: cloud (openai) and
+    local (ollama). Adding another provider requires updating the
+    README's provider notes too."""
+    assert SUPPORTED_PROVIDERS == ("openai", "ollama")
 
 
 def test_sample_module_is_parseable_python():
@@ -644,3 +644,40 @@ def test_all_passing_true_ok_with_at_most_two_todo_markers():
         ),
     )
     assert result.all_passing is True
+
+
+# --- Phase 2: local-Ollama fallback ---------------------------------------
+
+
+def test_build_agent_ollama_uses_local_endpoint(monkeypatch):
+    """LLM_PROVIDER=ollama swaps the model= arg on Agent from a plain
+    string to an OpenAIChatCompletionsModel wrapping an AsyncOpenAI
+    client that points at localhost:11434. Capture at the openai
+    module level."""
+    pytest.importorskip("agents")
+    captured: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    import openai
+    monkeypatch.setattr(openai, "AsyncOpenAI", _FakeClient)
+
+    agent_obj = _agent_pkg._build_agent(
+        source_code=_GOOD_SOURCE,
+        source_module_name="sample",
+        model="gemma4:e4b",
+        sandbox_timeout_seconds=10.0,
+        provider="ollama",
+    )
+    assert captured["base_url"].endswith("/v1")
+    assert "11434" in captured["base_url"]
+    assert captured["api_key"] == "ollama"
+    assert agent_obj is not None
+
+
+def test_translate_api_error_connection_refused_returns_ollama_hint():
+    exc = ConnectionError("Connection refused: http://localhost:11434")
+    out = _translate_api_error(exc)
+    assert "ollama serve" in str(out).lower()

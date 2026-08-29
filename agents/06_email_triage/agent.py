@@ -87,7 +87,11 @@ except ImportError:
 
 # --- Provider + constants --------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4.1-mini",
+    "ollama": "gemma4:e4b",
+}
 
 DEFAULT_RETRIES = 2  # PydanticAI Agent-level retry cap on validation errors
 MIN_BODY_CHARS = 20  # below this, R5 case 2 fires (empty-body)
@@ -98,21 +102,18 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 
 def resolve_provider() -> str:
-    """LLM_PROVIDER env var, default "openai". Only "openai" and
-    "mock" supported in v1. Multi-provider via PydanticAI's native
-    provider strings is a one-line swap documented in the README."""
+    """LLM_PROVIDER env var, default "openai". Supported: "openai",
+    "ollama", "mock". PydanticAI's native provider strings also
+    accept "anthropic:..." / "gemini:..." by swapping the model
+    string in _build_agent -- one-line change documented in the
+    README."""
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider != "mock" and provider not in SUPPORTED_PROVIDERS:
-        # PydanticAI takes the model string as the first positional arg
-        # on Agent(), not a kwarg -- so the error below points users at
-        # the model string, not at an `llm=` param that doesn't exist
-        # here (CrewAI, agent #05, uses `llm=`).
         raise ValueError(
             f"Unknown LLM_PROVIDER: {provider!r}. "
             f"Expected 'mock' or one of {SUPPORTED_PROVIDERS}. "
-            "PydanticAI supports Anthropic/Gemini via its native provider "
-            "strings -- swap the model string (`openai:...` -> "
-            "`anthropic:...` or `gemini:...`) in _build_agent (see README)."
+            "For Anthropic/Gemini, edit the model string in "
+            "_build_agent (see README)."
         )
     return provider
 
@@ -329,7 +330,9 @@ def triage_email(
             partial=TriageAttempt(stage="empty_body"),
         )
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(
+        resolved_provider
+    ) or resolve_model(resolved_provider)
 
     # Lazy imports: pydantic-ai works on Py3.14 but we still lazy-load
     # so schema tests + mock tests don't pull in the whole SDK.
@@ -340,7 +343,9 @@ def triage_email(
             "pydantic-ai is not installed. Run `uv sync` at the workspace root."
         ) from exc
 
-    agent = _agent if _agent is not None else _build_agent(model=resolved_model)
+    agent = _agent if _agent is not None else _build_agent(
+        model=resolved_model, provider=resolved_provider
+    )
 
     prompt = _format_email_for_prompt(parsed)
 
@@ -384,18 +389,36 @@ def _format_email_for_prompt(parsed: ParsedEmail) -> str:
 #     Agent + Deps + tool wiring in one place) ----------------------------
 
 
-def _build_agent(*, model: str):
+def _build_agent(*, model: str, provider: str = "openai"):
     """Build a PydanticAI Agent[TriageDeps, EmailTriage] with 4 tools
-    that access injected deps via RunContext[TriageDeps]. LLM is
-    addressed via PydanticAI's provider-prefix convention (`openai:`,
-    `anthropic:`, `gemini:` -- swap here for multi-provider).
+    that access injected deps via RunContext[TriageDeps]. Provider
+    routing:
+    - "openai" (default): `openai:{model}` shortcut string; needs
+      OPENAI_API_KEY.
+    - "ollama": explicit OllamaModel + OllamaProvider pointing at
+      the local Ollama server (no API key required; needs
+      `ollama serve` running and the model pulled).
 
     Lazy import: pydantic-ai has a heavy import graph we don't want
     in mock-mode tests."""
     from pydantic_ai import Agent
 
+    if provider == "ollama":
+        from pydantic_ai.models.ollama import OllamaModel
+        from pydantic_ai.providers.ollama import OllamaProvider
+
+        from common.llm import ollama_base_url
+        model_arg = OllamaModel(
+            model_name=model,
+            provider=OllamaProvider(
+                base_url=ollama_base_url(), api_key="ollama"
+            ),
+        )
+    else:
+        model_arg = f"openai:{model}"
+
     agent = Agent(
-        f"openai:{model}",
+        model_arg,
         deps_type=TriageDeps,
         output_type=EmailTriage,
         system_prompt=_load_system_prompt(),
@@ -459,6 +482,16 @@ def _translate_api_error(exc: Exception) -> EmailTriageError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
+    if (
+        "connection" in message_lower and "refused" in message_lower
+    ) or "connectionerror" in exc_class_name or (
+        "11434" in message_lower
+    ):
+        return EmailTriageError(
+            "Ollama connection failed. Is 'ollama serve' running? "
+            "See https://ollama.com/download and run "
+            "`ollama pull gemma4:e4b` to fetch the default local model."
+        )
 
     return EmailTriageError(
         f"Triage failed: {type(exc).__name__}: {exc}. "

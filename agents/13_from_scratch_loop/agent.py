@@ -542,9 +542,18 @@ def _build_client(provider: str) -> Any:
             "openai SDK not installed. Run `uv sync --all-packages` from the repo root."
         ) from exc
     if provider == "ollama":
-        raw_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-        base = raw_host.rstrip("/").removesuffix("/v1")
-        return openai.OpenAI(base_url=f"{base}/v1", api_key="ollama")
+        # Shared helper in common/llm.py so #13, OllamaLLM, and every
+        # Phase 2 framework wrapper agree on the endpoint format.
+        try:
+            from common.llm import ollama_base_url
+        except ImportError:
+            # Fallback if common/ isn't importable (shouldn't happen
+            # under uv workspace, but be defensive).
+            raw = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+            base_url = raw.rstrip("/").removesuffix("/v1") + "/v1"
+        else:
+            base_url = ollama_base_url()
+        return openai.OpenAI(base_url=base_url, api_key="ollama")
     return openai.OpenAI()
 
 

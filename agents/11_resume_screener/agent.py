@@ -66,9 +66,13 @@ except ImportError:
 
 # --- Constants -------------------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
-_DEFAULT_MODEL = "gpt-4o-mini"
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "ollama": "gemma4:e4b",
+}
+_DEFAULT_MODEL = _DEFAULT_MODEL_BY_PROVIDER["openai"]  # backcompat re-export
 _SUPPORTED_SUFFIXES = (".pdf", ".docx", ".md", ".txt")
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "system.txt"
@@ -245,9 +249,11 @@ class _ScoringOutput(BaseModel):
 # --- PydanticAI Agent construction ----------------------------------------
 
 
-def _build_agent(*, model: str):
+def _build_agent(*, model: str, provider: str = "openai"):
     """Construct the PydanticAI Agent. Lazy-imported so mock-mode paths
-    don't require pydantic-ai to be installed."""
+    don't require pydantic-ai to be installed. Provider "ollama" routes
+    to a local Ollama server via OllamaModel; "openai" keeps the
+    existing string-model form."""
     try:
         from pydantic_ai import Agent
     except ImportError as exc:
@@ -255,8 +261,23 @@ def _build_agent(*, model: str):
             "pydantic-ai not installed. Run `uv sync --all-packages` from "
             "the repo root."
         ) from exc
+
+    if provider == "ollama":
+        from pydantic_ai.models.ollama import OllamaModel
+        from pydantic_ai.providers.ollama import OllamaProvider
+
+        from common.llm import ollama_base_url
+        model_arg: Any = OllamaModel(
+            model_name=model,
+            provider=OllamaProvider(
+                base_url=ollama_base_url(), api_key="ollama"
+            ),
+        )
+    else:
+        model_arg = model
+
     return Agent(
-        model=model,
+        model=model_arg,
         output_type=_ScoringOutput,
         system_prompt=_load_system_prompt(),
     )
@@ -305,8 +326,12 @@ def screen_candidates(
     if resolved == "mock":
         return _mock_screening_result(job_description, resumes)
 
-    resolved_model = model or _DEFAULT_MODEL
-    agent = _agent if _agent is not None else _build_agent(model=resolved_model)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(
+        resolved, _DEFAULT_MODEL
+    )
+    agent = _agent if _agent is not None else _build_agent(
+        model=resolved_model, provider=resolved
+    )
 
     start = time.perf_counter()
     scorecards: list[CandidateScorecard] = []
@@ -417,6 +442,17 @@ def _translate_api_error(
         return _rate_limit_error(partial)
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error(partial)
+    if (
+        "connection" in message_lower and "refused" in message_lower
+    ) or "connectionerror" in exc_class_name or (
+        "11434" in message_lower
+    ):
+        return ScreenerError(
+            "Ollama connection failed. Is 'ollama serve' running? "
+            "See https://ollama.com/download and run "
+            "`ollama pull gemma4:e4b` to fetch the default local model.",
+            partial=partial,
+        )
     return ScreenerError(
         f"LLM call failed for resume {resume_id!r}: "
         f"{type(exc).__name__}: {exc}.",

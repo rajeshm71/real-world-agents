@@ -90,7 +90,12 @@ from common.llm import resolve_model
 # CrewAI works multi-provider via LiteLLM (built-in). We default to
 # openai, matching #01-04's convention. Users swap by changing the
 # `llm=` param string on Agents in _build_crew.
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
+
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "ollama": "gemma4:e4b",
+}
 
 DEFAULT_MAX_ITER = 15  # per-agent max iterations before CrewAI stops
 MIN_TOPIC_CHARS = 10
@@ -312,7 +317,9 @@ def run_research(
             partial=ResearchAttempt(topic=topic, stage="search"),
         )
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(
+        resolved_provider
+    ) or resolve_model(resolved_provider)
 
     # Lazy import: crewai has no wheels for Python 3.14 yet. Mock
     # mode + R5 case 1 + the search preflight above must NOT require
@@ -337,7 +344,7 @@ def run_research(
 
     crew = _crew if _crew is not None else _build_crew(
         topic=topic, model=resolved_model, max_iter=max_iter,
-        initial_sources=initial_sources,
+        initial_sources=initial_sources, provider=resolved_provider,
     )
 
     try:
@@ -371,7 +378,7 @@ def run_research(
 #     Agent + Task + Crew + Process wiring in one place) ------------------
 
 
-def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[Source]):
+def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[Source], provider: str = "openai"):
     """Build and return the 3-agent Sequential-Process Crew.
 
     Agents (all lazy-instantiated via crewai imports below):
@@ -394,8 +401,17 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
     # Lazy imports: crewai unavailable on Python 3.14. Wrapped in
     # try/except at the caller level so this factory would only
     # execute after that check passed.
-    from crewai import Agent, Crew, Process, Task  # type: ignore[import-not-found]
+    from crewai import LLM, Agent, Crew, Process, Task  # type: ignore[import-not-found]
     from crewai.tools import BaseTool  # type: ignore[import-not-found]
+
+    if provider == "ollama":
+        from common.llm import ollama_base_url
+        llm_arg = LLM(
+            model=f"ollama_chat/{model}",
+            base_url=ollama_base_url().removesuffix("/v1"),
+        )
+    else:
+        llm_arg = f"openai/{model}"
 
     # Wrap our two tools as CrewAI BaseTool subclasses. Simple
     # class-based tools rather than the @tool decorator because
@@ -440,7 +456,7 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
         goal=f"Gather credible sources on the topic: {topic}",
         backstory=_load_prompt("researcher.txt"),
         tools=[search_tool],
-        llm=f"openai/{model}",
+        llm=llm_arg,
         verbose=False,
         max_iter=max_iter,
     )
@@ -448,7 +464,7 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
         role="Research Brief Writer",
         goal=f"Synthesize research notes into a clear brief on: {topic}",
         backstory=_load_prompt("writer.txt"),
-        llm=f"openai/{model}",
+        llm=llm_arg,
         verbose=False,
         max_iter=max_iter,
     )
@@ -457,7 +473,7 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
         goal=f"Polish the brief and verify every source citation for: {topic}",
         backstory=_load_prompt("editor.txt"),
         tools=[verify_tool],
-        llm=f"openai/{model}",
+        llm=llm_arg,
         verbose=False,
         max_iter=max_iter,
     )

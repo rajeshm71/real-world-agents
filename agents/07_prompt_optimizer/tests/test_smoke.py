@@ -452,7 +452,7 @@ def test_supported_providers_matches_common_llm():
     """Kept in sync with common/llm.py's SUPPORTED_PROVIDERS. If those
     two ever drift, the CLI's --provider choices will show one thing
     and the resolver will accept another."""
-    assert set(SUPPORTED_PROVIDERS) == {"openai", "anthropic", "gemini"}
+    assert set(SUPPORTED_PROVIDERS) == {"openai", "anthropic", "gemini", "ollama"}
 
 
 def test_effort_levels_line_up_with_cost_estimates():

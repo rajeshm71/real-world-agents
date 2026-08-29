@@ -70,6 +70,17 @@ _MODEL_ENV_VARS: dict[str, str] = {
 }
 
 
+def ollama_base_url() -> str:
+    """Return the Ollama OpenAI-compat base URL. Respects the
+    `OLLAMA_HOST` env var; strips a trailing `/v1` if the user
+    already included one (so both `http://host` and `http://host/v1`
+    work). Used by Phase 1's `OllamaLLM`, agent #13's `_build_client`,
+    and every Phase 2 framework wrapper so all callers agree on the
+    endpoint format."""
+    raw = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    return raw.rstrip("/").removesuffix("/v1") + "/v1"
+
+
 def resolve_model(provider: str) -> str:
     """Return the model string to use for `provider`: the env-var override
     if the user set one, else DEFAULT_MODELS[provider]. This is the single
@@ -298,9 +309,13 @@ class OllamaLLM:
         # Lazy import, same convention as OpenAILLM/AnthropicLLM.
         from openai import OpenAI
 
-        raw_host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-        base = raw_host.rstrip("/").removesuffix("/v1")
-        self._client = OpenAI(base_url=f"{base}/v1", api_key="ollama")
+        if host is not None:
+            # Explicit host arg overrides the helper's env-var read.
+            base = host.rstrip("/").removesuffix("/v1")
+            base_url = f"{base}/v1"
+        else:
+            base_url = ollama_base_url()
+        self._client = OpenAI(base_url=base_url, api_key="ollama")
 
     def complete(
         self,

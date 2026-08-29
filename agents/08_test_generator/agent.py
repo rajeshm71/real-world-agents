@@ -76,7 +76,12 @@ from common.llm import resolve_model
 
 # OpenAI-only in v1, matching agent #04's stance. LiteLLM swap is the
 # documented one-line change for a v1.1 that adds Anthropic/Gemini.
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
+
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "ollama": "gemma4:e4b",
+}
 
 DEFAULT_MAX_ITERATIONS = 5
 DEFAULT_SANDBOX_TIMEOUT_SECONDS = 30.0
@@ -349,7 +354,9 @@ def generate_tests(
     if resolved_provider == "mock":
         return _mock_generation(source_path)
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(
+        resolved_provider
+    ) or resolve_model(resolved_provider)
 
     # R5 case 1: bad path / unreadable / unparseable source, BEFORE any
     # LLM call. Fail fast with actionable message.
@@ -395,6 +402,7 @@ def generate_tests(
         source_module_name=source_module_name,
         model=resolved_model,
         sandbox_timeout_seconds=sandbox_timeout_seconds,
+        provider=resolved_provider,
     )
 
     # Each iteration is roughly plan + generate + execute. Cap Runner's
@@ -437,6 +445,7 @@ def _build_agent(
     source_module_name: str,
     model: str,
     sandbox_timeout_seconds: float,
+    provider: str = "openai",
 ):
     """Build the openai-agents Agent with three tools. Tools are plain
     closures over `source_code` + `source_module_name` +
@@ -444,6 +453,22 @@ def _build_agent(
     through every call. Same closure-in-factory pattern agent #04 uses.
     """
     from agents import Agent, function_tool
+
+    if provider == "ollama":
+        from agents.models.openai_chatcompletions import (
+            OpenAIChatCompletionsModel,
+        )
+        from openai import AsyncOpenAI
+
+        from common.llm import ollama_base_url
+        model_arg = OpenAIChatCompletionsModel(
+            model=model,
+            openai_client=AsyncOpenAI(
+                base_url=ollama_base_url(), api_key="ollama"
+            ),
+        )
+    else:
+        model_arg = model
 
     def list_public_symbols(source_code_input: str) -> list[str]:
         """List public top-level `def` and `class` names from a Python source string. Call this first to discover what to test."""
@@ -465,7 +490,7 @@ def _build_agent(
     return Agent(
         name="test-generator-agent",
         instructions=_load_system_prompt(),
-        model=model,
+        model=model_arg,
         tools=[
             function_tool(list_public_symbols),
             function_tool(check_syntax),
@@ -504,6 +529,16 @@ def _translate_api_error(exc: Exception) -> TestGeneratorError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
+    if (
+        "connection" in message_lower and "refused" in message_lower
+    ) or "connectionerror" in exc_class_name or (
+        "11434" in message_lower
+    ):
+        return TestGeneratorError(
+            "Ollama connection failed. Is 'ollama serve' running? "
+            "See https://ollama.com/download and run "
+            "`ollama pull gemma4:e4b` to fetch the default local model."
+        )
 
     return TestGeneratorError(
         f"Generation failed: {type(exc).__name__}: {exc}. "

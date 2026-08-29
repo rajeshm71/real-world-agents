@@ -562,8 +562,8 @@ def test_pdf_loader_strips_pages_before_join():
 # --- 6. Constants + example sanity ----------------------------------------
 
 
-def test_supported_providers_openai_only():
-    assert SUPPORTED_PROVIDERS == ("openai",)
+def test_supported_providers_includes_openai_and_ollama():
+    assert SUPPORTED_PROVIDERS == ("openai", "ollama")
 
 
 def test_dimension_names_are_the_canonical_three():
@@ -584,3 +584,35 @@ def test_resumes_dir_has_one_per_supported_format():
     # We ship at least .pdf, .docx, .md (txt is loader-supported but
     # not required in examples/).
     assert {".pdf", ".docx", ".md"}.issubset(suffixes)
+
+
+# --- Phase 2: local-Ollama fallback ---------------------------------------
+
+
+def test_build_agent_ollama_uses_local_endpoint(monkeypatch):
+    pytest.importorskip("pydantic_ai")
+    captured: dict = {}
+
+    from pydantic_ai.providers import ollama as _ollama_prov_mod
+    real_provider = _ollama_prov_mod.OllamaProvider
+
+    class _CapturingProvider(real_provider):
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(
+        _ollama_prov_mod, "OllamaProvider", _CapturingProvider
+    )
+
+    agent = _agent._build_agent(model="gemma4:e4b", provider="ollama")
+    assert captured["base_url"].endswith("/v1")
+    assert "11434" in captured["base_url"]
+    assert captured["api_key"] == "ollama"
+    assert agent is not None
+
+
+def test_translate_api_error_connection_refused_returns_ollama_hint():
+    exc = ConnectionError("Connection refused: http://localhost:11434")
+    err = _translate_api_error(exc)
+    assert "ollama serve" in err.message.lower()

@@ -533,3 +533,44 @@ def test_h1_empty_participants_nulls_all_owners():
         overall_summary="Meeting with no clear speakers.",
     )
     assert summary.action_items[0].owner is None
+
+
+# --- Phase 2: local-Ollama fallback ---------------------------------------
+
+
+def test_supported_providers_includes_ollama():
+    """Locks in local-Ollama fallback: LLM_PROVIDER=ollama routes to
+    a local Ollama server via the OpenAI Agents SDK's chat-completions
+    client. Cloud path (openai) remains the default."""
+    assert _agent.SUPPORTED_PROVIDERS == ("openai", "ollama")
+
+
+def test_build_agent_ollama_uses_local_endpoint(monkeypatch):
+    """When provider="ollama" the SDK client points at localhost:11434
+    with the "ollama" sentinel key. Captured by patching AsyncOpenAI
+    at its openai-module home; the OpenAIChatCompletionsModel wraps
+    that captured client and passes it to Agent(model=...)."""
+    captured: dict = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    import openai
+    monkeypatch.setattr(openai, "AsyncOpenAI", _FakeClient)
+
+    agent = _build_agent(
+        model="gemma4:e4b", notes=_REAL_NOTES, provider="ollama"
+    )
+    assert captured["base_url"].endswith("/v1")
+    assert "11434" in captured["base_url"]
+    assert captured["api_key"] == "ollama"
+    assert agent is not None
+
+
+def test_translate_api_error_connection_refused_returns_ollama_hint():
+    """Connection refused (Ollama not running) surfaces the
+    'is ollama serve running?' hint instead of the generic fallback."""
+    exc = ConnectionError("Connection refused to http://localhost:11434/v1/chat")
+    err = _translate_api_error(exc)
+    assert "ollama serve" in str(err).lower()
