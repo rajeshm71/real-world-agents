@@ -144,8 +144,22 @@ class DDGProvider:
             with self._DDGS() as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
         except Exception as exc:
-            msg = type(exc).__name__.lower()
-            if "ratelimit" in msg or "rate_limit" in msg:
+            exc_cls = type(exc).__name__.lower()
+            msg_lower = str(exc).lower()
+            # "No results found" is a legitimate empty-result outcome
+            # for THIS query -- not a provider failure. Return [] so
+            # the caller can treat the claim as unverifiable, rather
+            # than triggering the whole chain to bail.
+            if "no results" in msg_lower:
+                return []
+            # Rate-limits + transient network problems (timeouts,
+            # connection errors, DNS failures, unreachable hosts)
+            # should trigger chain fallback so a working provider
+            # can answer instead. Treat them uniformly as
+            # SearchRateLimit; the chain will move on.
+            if any(k in exc_cls for k in ("ratelimit", "timeout", "connect")):
+                raise SearchRateLimit(f"DDG: {exc}") from exc
+            if any(k in msg_lower for k in ("rate limit", "timed out", "unreachable network")):
                 raise SearchRateLimit(f"DDG: {exc}") from exc
             raise
         return [

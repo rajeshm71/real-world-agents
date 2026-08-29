@@ -53,8 +53,8 @@ try:
         _substring_of_normalized,
     )
     from .search import (
-        SearchAllUnavailable,
         SearchClient,
+        SearchError,
         SearchHit,
         build_search_client,
     )
@@ -68,8 +68,8 @@ except ImportError:
         _substring_of_normalized,
     )
     from search import (  # type: ignore[no-redef]
-        SearchAllUnavailable,
         SearchClient,
+        SearchError,
         SearchHit,
         build_search_client,
     )
@@ -520,6 +520,7 @@ def _verify_claim(
     grounding_query = _build_grounding_query(claim)
     specific_query = _build_search_query(claim)
     all_hits: list[SearchHit] = []
+    search_failed = False
     try:
         if grounding_query and grounding_query != specific_query:
             grounding_hits = search_client.search(
@@ -530,11 +531,29 @@ def _verify_claim(
             specific_query, max_results=max_search_results
         )
         all_hits.extend(specific_hits)
-    except SearchAllUnavailable as exc:
-        raise FactCheckError(
-            f"search chain exhausted while verifying {claim.claim_id!r}: {exc}",
-            partial=FactCheckAttempt(stage="verify", claim_id=claim.claim_id),
-        ) from exc
+    except SearchError as exc:
+        # Any search-side failure for THIS claim (rate-limit, chain
+        # exhausted, single-provider transient error) shouldn't kill
+        # the whole run. Record it, mark the claim as unverifiable,
+        # and let the pipeline continue with the rest.
+        search_failed = True
+        run_meta.setdefault("search_failures", {})[claim.claim_id] = (
+            f"{type(exc).__name__}: {str(exc)[:200]}"
+        )
+
+    if search_failed:
+        return ClaimVerdict(
+            claim=claim,
+            verdict="unverifiable",
+            confidence="low",
+            explanation=(
+                "Search-provider chain exhausted for this claim (network or "
+                "rate-limit issue). Verdict cannot be established without "
+                "search evidence. Try again with TAVILY_API_KEY / "
+                "BRAVE_API_KEY set for a more reliable search chain."
+            ),
+            evidence=[],
+        )
     provider_used = getattr(search_client, "last_used_provider", None) or getattr(
         search_client, "provider_name", "ddg"
     )

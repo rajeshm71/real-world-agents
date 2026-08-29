@@ -444,15 +444,22 @@ def test_verify_no_search_hits_produces_unverifiable():
     assert stub.call_count == 1
 
 
-def test_verify_search_exhausted_raises():
+def test_verify_search_exhausted_degrades_to_unverifiable():
+    """When the search chain is fully exhausted for a claim, verify
+    returns an unverifiable verdict rather than raising -- so one
+    bad search doesn't kill the whole batch. Failure is recorded in
+    run_meta for observability."""
     claim = _make_claim()
     chain = ChainProvider([_RateLimitedProvider(), _RateLimitedProvider()])
     stub = _StubOllama([_TRIAGE_DEFER_TO_SEARCH])
     run_meta: dict = {}
-    with pytest.raises(FactCheckError, match="search chain exhausted"):
-        _verify_claim(claim, ollama_client=stub, ollama_model="t",
+    v = _verify_claim(claim, ollama_client=stub, ollama_model="t",
                      search_client=chain, max_search_results=5,
                      run_meta=run_meta)
+    assert v.verdict == "unverifiable"
+    assert v.confidence == "low"
+    assert v.evidence == []
+    assert claim.claim_id in run_meta.get("search_failures", {})
 
 
 def test_verify_fast_path_skips_search_on_well_known_fact():
