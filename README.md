@@ -49,7 +49,7 @@ cd agents/01_receipt_extractor && uv run python -m agent path/to/receipt.jpg
 
 No API key is required to explore the code or run tests: every test suite runs under `LLM_PROVIDER=mock`. A key is only needed for a real (non-mock) call.
 
-**No API key at all? Run locally on your own hardware.** Install [Ollama](https://ollama.com/download), pull the default model (`ollama pull gemma4:e4b`), then run any covered agent with `LLM_PROVIDER=ollama`. Slower and less accurate than the paid providers, but zero-cost and works offline. Coverage today: #02 (contract reviewer), #03 (CSV chat), #04 (meeting notes), #05 (research crew), #06 (email triage), #07 (prompt optimizer), #08 (test generator), #11 (resume screener), #13 (from-scratch loop), and #16 (fact-checker). The vision agents (#01, #09, #15) and Anthropic-native agents (#10, #14) still require their cloud providers.
+**No API key at all? Run locally on your own hardware.** Install [Ollama](https://ollama.com/download), pull the default model (`ollama pull gemma4:e4b`), then run any covered agent with `LLM_PROVIDER=ollama`. Slower and less accurate than the paid providers, but zero-cost and works offline. Coverage today: #02, #03, #04, #05, #06, #08, #13, and #16 have been manually verified end-to-end on a local RTX 5050 (8 GB); #07 and #11 wire the provider through correctly but hit a smaller-model limit against the current schema/optimizer settings (#11's structured output is too complex for gemma4:e4b to emit reliably; #07 needs a separate reflection LM regardless of provider). The vision agents (#01, #09, #15) and Anthropic-native agents (#10, #14) still require their cloud providers.
 
 ## Cost note
 

@@ -529,16 +529,9 @@ def _translate_api_error(exc: Exception) -> TestGeneratorError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
-    if (
-        "connection" in message_lower and "refused" in message_lower
-    ) or "connectionerror" in exc_class_name or (
-        "11434" in message_lower
-    ):
-        return TestGeneratorError(
-            "Ollama connection failed. Is 'ollama serve' running? "
-            "See https://ollama.com/download and run "
-            "`ollama pull gemma4:e4b` to fetch the default local model."
-        )
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return TestGeneratorError(OLLAMA_CONNECTION_HINT)
 
     return TestGeneratorError(
         f"Generation failed: {type(exc).__name__}: {exc}. "

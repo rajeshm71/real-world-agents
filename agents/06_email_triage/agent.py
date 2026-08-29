@@ -406,6 +406,7 @@ def _build_agent(*, model: str, provider: str = "openai"):
     if provider == "ollama":
         from pydantic_ai.models.ollama import OllamaModel
         from pydantic_ai.providers.ollama import OllamaProvider
+        from pydantic_ai.settings import ModelSettings
 
         from common.llm import ollama_base_url
         model_arg = OllamaModel(
@@ -414,8 +415,13 @@ def _build_agent(*, model: str, provider: str = "openai"):
                 base_url=ollama_base_url(), api_key="ollama"
             ),
         )
+        # PydanticAI's OllamaModel treats max_tokens as an overall
+        # context cap (prompt + response). 8192 leaves room for a
+        # long email body plus the structured EmailTriage output.
+        settings = ModelSettings(max_tokens=8192)
     else:
         model_arg = f"openai:{model}"
+        settings = None
 
     agent = Agent(
         model_arg,
@@ -423,6 +429,7 @@ def _build_agent(*, model: str, provider: str = "openai"):
         output_type=EmailTriage,
         system_prompt=_load_system_prompt(),
         retries=DEFAULT_RETRIES,
+        model_settings=settings,
     )
 
     @agent.tool
@@ -482,16 +489,9 @@ def _translate_api_error(exc: Exception) -> EmailTriageError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
-    if (
-        "connection" in message_lower and "refused" in message_lower
-    ) or "connectionerror" in exc_class_name or (
-        "11434" in message_lower
-    ):
-        return EmailTriageError(
-            "Ollama connection failed. Is 'ollama serve' running? "
-            "See https://ollama.com/download and run "
-            "`ollama pull gemma4:e4b` to fetch the default local model."
-        )
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return EmailTriageError(OLLAMA_CONNECTION_HINT)
 
     return EmailTriageError(
         f"Triage failed: {type(exc).__name__}: {exc}. "

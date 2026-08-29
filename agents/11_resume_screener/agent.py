@@ -265,6 +265,7 @@ def _build_agent(*, model: str, provider: str = "openai"):
     if provider == "ollama":
         from pydantic_ai.models.ollama import OllamaModel
         from pydantic_ai.providers.ollama import OllamaProvider
+        from pydantic_ai.settings import ModelSettings
 
         from common.llm import ollama_base_url
         model_arg: Any = OllamaModel(
@@ -273,13 +274,26 @@ def _build_agent(*, model: str, provider: str = "openai"):
                 base_url=ollama_base_url(), api_key="ollama"
             ),
         )
+        # PydanticAI's OllamaModel treats max_tokens as an overall
+        # context cap (prompt + response), not just the response cap
+        # -- so give it enough room for JD + resume + system prompt +
+        # structured-output overhead + response. 8192 comfortably fits
+        # gemma4:e4b's window.
+        settings: Any = ModelSettings(max_tokens=8192)
     else:
         model_arg = model
+        settings = None
 
+    # Ollama's smaller models produce schema-non-conformant JSON on
+    # first try more often than GPT-4o-mini; give the validator a few
+    # retries. Openai path keeps the default (1).
+    retries = 3 if provider == "ollama" else 1
     return Agent(
         model=model_arg,
         output_type=_ScoringOutput,
         system_prompt=_load_system_prompt(),
+        model_settings=settings,
+        retries=retries,
     )
 
 
@@ -442,17 +456,9 @@ def _translate_api_error(
         return _rate_limit_error(partial)
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error(partial)
-    if (
-        "connection" in message_lower and "refused" in message_lower
-    ) or "connectionerror" in exc_class_name or (
-        "11434" in message_lower
-    ):
-        return ScreenerError(
-            "Ollama connection failed. Is 'ollama serve' running? "
-            "See https://ollama.com/download and run "
-            "`ollama pull gemma4:e4b` to fetch the default local model.",
-            partial=partial,
-        )
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return ScreenerError(OLLAMA_CONNECTION_HINT, partial=partial)
     return ScreenerError(
         f"LLM call failed for resume {resume_id!r}: "
         f"{type(exc).__name__}: {exc}.",

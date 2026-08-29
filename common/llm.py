@@ -70,6 +70,26 @@ _MODEL_ENV_VARS: dict[str, str] = {
 }
 
 
+OLLAMA_CONNECTION_HINT = (
+    "Ollama connection failed. Is 'ollama serve' running? "
+    "See https://ollama.com/download and run "
+    "`ollama pull gemma4:e4b` to fetch the default local model."
+)
+
+
+def is_ollama_connection_error(exc: Exception) -> bool:
+    """True iff `exc` looks like a failed connection to a local Ollama
+    server. Substring 'connecterror' covers both stdlib
+    `ConnectionError` and `httpx.ConnectError` (whose class name is
+    just 'ConnectError'), plus the message-level 'connection refused'
+    text these paths always surface."""
+    name = type(exc).__name__.lower()
+    if "connecterror" in name:
+        return True
+    msg = str(exc).lower()
+    return "connection" in msg and "refused" in msg
+
+
 def ollama_base_url() -> str:
     """Return the Ollama OpenAI-compat base URL. Respects the
     `OLLAMA_HOST` env var; strips a trailing `/v1` if the user
