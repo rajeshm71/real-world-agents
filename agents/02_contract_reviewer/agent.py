@@ -78,7 +78,7 @@ from common.llm import LLM, get_llm, resolve_model
 
 # --- Provider ---
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
 
 # --- Scanned-PDF detection thresholds ([M3] in the F2 plan) ---
 #

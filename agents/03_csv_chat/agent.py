@@ -74,7 +74,7 @@ from common.llm import LLM, get_llm, resolve_model
 
 # --- Provider + constants --------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_MAX_TOKENS_SQL = 1024

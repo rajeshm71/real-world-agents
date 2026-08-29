@@ -63,9 +63,12 @@ except ImportError:
 
 # --- Constants -------------------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
-_DEFAULT_MODEL = "gpt-4o-mini"
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "ollama": "gemma4:e4b",
+}
 DEFAULT_MAX_ITERATIONS = 10
 _LIST_FILES_CAP = 200
 _READ_FILE_LINE_CAP = 400
@@ -409,8 +412,8 @@ def ask(
     if resolved == "mock":
         return _mock_trace(question, repo_root=repo_root_path)
 
-    client = _client if _client is not None else _build_client()
-    resolved_model = model or _DEFAULT_MODEL
+    client = _client if _client is not None else _build_client(resolved)
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER[resolved]
 
     messages: list[dict] = [
         {"role": "system", "content": _load_prompt()},
@@ -527,13 +530,21 @@ def ask(
     )
 
 
-def _build_client() -> Any:
+def _build_client(provider: str) -> Any:
+    """Build the openai-SDK client. `provider="openai"` uses cloud
+    OpenAI (needs OPENAI_API_KEY). `provider="ollama"` points the same
+    client at the local Ollama server via its OpenAI-compatible
+    endpoint (needs `ollama serve` running, no API key)."""
     try:
         import openai
     except ImportError as exc:
         raise AgentError(
             "openai SDK not installed. Run `uv sync --all-packages` from the repo root."
         ) from exc
+    if provider == "ollama":
+        raw_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        base = raw_host.rstrip("/").removesuffix("/v1")
+        return openai.OpenAI(base_url=f"{base}/v1", api_key="ollama")
     return openai.OpenAI()
 
 
@@ -549,6 +560,18 @@ def _translate_api_error(
     exc_class_name = type(exc).__name__.lower()
     message_lower = str(exc).lower()
     status = getattr(exc, "status_code", None)
+    # Ollama server not running is the single most common failure mode
+    # on the local-Ollama path. Surface a clean hint instead of the
+    # raw httpx traceback.
+    if "connection" in exc_class_name or (
+        "refused" in message_lower or "connection refused" in message_lower
+    ):
+        return AgentError(
+            "Ollama connection failed. If you set --provider ollama, "
+            "is `ollama serve` running? See https://ollama.com/download "
+            "to install, then `ollama pull gemma4:e4b` for the default model.",
+            partial=partial,
+        )
     if "ratelimiterror" in exc_class_name:
         return _rate_limit_error(partial)
     if "authenticationerror" in exc_class_name or "apikeyerror" in exc_class_name:

@@ -49,6 +49,8 @@ cd agents/01_receipt_extractor && uv run python -m agent path/to/receipt.jpg
 
 No API key is required to explore the code or run tests: every test suite runs under `LLM_PROVIDER=mock`. A key is only needed for a real (non-mock) call.
 
+**No API key at all? Run locally on your own hardware.** Install [Ollama](https://ollama.com/download), pull the default model (`ollama pull gemma4:e4b`), and every agent that goes through `common/llm.py` falls back to that automatically when no cloud API key is set. Slower and less accurate than the paid providers, but zero-cost and works offline. Agent-by-agent local-Ollama coverage is rolling out across the catalog; today it covers #02 (contract reviewer), #03 (CSV chat), #13 (from-scratch loop), and #16 (fact-checker).
+
 ## Cost note
 
 Running any agent against a real provider costs real money: every agent's own README documents its per-run cost once measured. Provider and model are fully configurable (OpenAI, Anthropic, or Gemini; see [`.env.example`](.env.example) for every option, including per-provider model overrides). No provider is hardcoded, and no provider is required to develop against: mock mode is the default for CI and local test runs.

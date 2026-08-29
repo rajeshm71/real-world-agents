@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -43,12 +44,17 @@ DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4.1-mini-2025-04-14",
     "anthropic": "claude-sonnet-5",
     "gemini": "gemini-2.5-flash",
+    # Local-Ollama fallback: Gemma-4-E4B is natively multimodal and
+    # supports tool calling. Fits in 8 GB VRAM. Users pull the model
+    # once with `ollama pull gemma4:e4b`.
+    "ollama": "gemma4:e4b",
 }
 
 _MODEL_ENV_VARS: dict[str, str] = {
     "openai": "OPENAI_DEFAULT_MODEL",
     "anthropic": "ANTHROPIC_DEFAULT_MODEL",
     "gemini": "GEMINI_DEFAULT_MODEL",
+    "ollama": "OLLAMA_DEFAULT_MODEL",
 }
 
 
@@ -263,6 +269,77 @@ class GeminiLLM:
         )
 
 
+class OllamaLLM:
+    """Local-Ollama adapter via Ollama's OpenAI-compatible endpoint.
+
+    No API key required (Ollama runs entirely on the user's machine).
+    The `openai` Python SDK is reused with a `base_url` pointed at the
+    local server -- no additional runtime dep. Users need to install
+    Ollama separately (https://ollama.com/download) and pull the
+    default model once: `ollama pull gemma4:e4b`.
+
+    `OLLAMA_HOST` env var overrides the endpoint; if the user sets it
+    with a trailing `/v1` already included, that is stripped so the
+    final URL never doubles up (`.../v1/v1`)."""
+
+    def __init__(self, host: str | None = None) -> None:
+        # Lazy import, same convention as OpenAILLM/AnthropicLLM.
+        from openai import OpenAI
+
+        raw_host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        base = raw_host.rstrip("/").removesuffix("/v1")
+        self._client = OpenAI(base_url=f"{base}/v1", api_key="ollama")
+
+    def complete(
+        self,
+        prompt: str,
+        model: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+        cacheable_prefix: str | None = None,  # no-op: llama.cpp has no caching-tier we can control
+    ) -> LLMResponse:
+        start = time.perf_counter()
+        try:
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except Exception as exc:
+            # Ollama server not running is the single most common
+            # failure mode -- surface a clean hint instead of the raw
+            # httpx traceback.
+            exc_class = type(exc).__name__.lower()
+            msg_lower = str(exc).lower()
+            if "connection" in exc_class or "connect" in msg_lower or "refused" in msg_lower:
+                raise RuntimeError(
+                    "Ollama connection failed. Is `ollama serve` running? "
+                    "See https://ollama.com/download to install, then "
+                    f"`ollama pull {DEFAULT_MODELS['ollama']}` to fetch the "
+                    "default model."
+                ) from exc
+            raise
+        latency_ms = (time.perf_counter() - start) * 1000
+
+        choice = response.choices[0]
+        usage = response.usage
+        # Ollama's OpenAI-compat response includes prompt/completion
+        # tokens but NOT prompt_tokens_details.cached_tokens (that's
+        # OpenAI-specific). Default cached=0 gracefully.
+        cached = 0
+        if usage is not None and getattr(usage, "prompt_tokens_details", None):
+            cached = getattr(usage.prompt_tokens_details, "cached_tokens", 0) or 0
+
+        return LLMResponse(
+            text=choice.message.content or "",
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            cached_input_tokens=cached,
+            latency_ms=latency_ms,
+        )
+
+
 @dataclass
 class _RecordedCall:
     prompt: str
@@ -344,22 +421,72 @@ class MockLLM:
         )
 
 
+_FALLBACK_BANNER_SHOWN = False
+
+
+def _autodetect_provider() -> str:
+    """Called when `LLM_PROVIDER` is unset. Picks the first cloud
+    provider whose API key is a non-empty env value; falls back to
+    ollama (local, free, offline) otherwise. Empty-string keys count
+    as unset so a `.env` line like `OPENAI_API_KEY=""` doesn't wrongly
+    win."""
+    for env_var, provider in (
+        ("OPENAI_API_KEY", "openai"),
+        ("ANTHROPIC_API_KEY", "anthropic"),
+        ("GEMINI_API_KEY", "gemini"),
+    ):
+        val = (os.environ.get(env_var) or "").strip()
+        if val:
+            return provider
+    _log_ollama_fallback_banner()
+    return "ollama"
+
+
+def _log_ollama_fallback_banner() -> None:
+    """Once-per-process stderr banner telling the user we picked the
+    local-Ollama fallback because no API keys were set. Suppressed
+    when NO_FALLBACK_BANNER=1 (useful for tests / CI-like runs)."""
+    global _FALLBACK_BANNER_SHOWN
+    if _FALLBACK_BANNER_SHOWN:
+        return
+    if os.environ.get("NO_FALLBACK_BANNER") == "1":
+        _FALLBACK_BANNER_SHOWN = True
+        return
+    print(
+        "[real-world-agents] no *_API_KEY env vars found; falling back to "
+        f"local Ollama with model={DEFAULT_MODELS['ollama']!r}. "
+        "Set LLM_PROVIDER explicitly to silence this.",
+        file=sys.stderr,
+    )
+    _FALLBACK_BANNER_SHOWN = True
+
+
 def get_llm(provider: str | None = None) -> LLM:
-    """Factory. Respects the LLM_PROVIDER env var if `provider` not passed.
-    Values: "openai" (default), "anthropic", "gemini", "mock". CI always
-    sets LLM_PROVIDER=mock per R8.
-    """
-    provider = (provider or os.environ.get("LLM_PROVIDER", "openai")).lower()
+    """Factory. Respects the `LLM_PROVIDER` env var if `provider` is
+    not passed. Values: "openai", "anthropic", "gemini", "ollama",
+    "mock". CI always sets LLM_PROVIDER=mock per R8.
+
+    When neither `provider` nor `LLM_PROVIDER` is set, autodetects
+    from the *_API_KEY env vars and falls back to local Ollama if
+    none are configured (OSS-friendly default -- no paid key needed
+    to kick the tires)."""
+    if provider is None:
+        raw = os.environ.get("LLM_PROVIDER")
+        provider = raw if raw is not None else _autodetect_provider()
+    provider = provider.lower()
     if provider == "openai":
         return OpenAILLM()
     if provider == "anthropic":
         return AnthropicLLM()
     if provider == "gemini":
         return GeminiLLM()
+    if provider == "ollama":
+        return OllamaLLM()
     if provider == "mock":
         return MockLLM()
     raise ValueError(
-        f"Unknown LLM_PROVIDER: {provider!r}. Expected 'openai', 'anthropic', 'gemini', or 'mock'."
+        f"Unknown LLM_PROVIDER: {provider!r}. Expected 'openai', "
+        "'anthropic', 'gemini', 'ollama', or 'mock'."
     )
 
 

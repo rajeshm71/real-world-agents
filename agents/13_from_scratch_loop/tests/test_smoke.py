@@ -550,8 +550,40 @@ def test_non_string_content_is_coerced_to_none(monkeypatch):
 # --- 6. Constants + sample_repo + tool-schema sanity ----------------------
 
 
-def test_supported_providers_openai_only():
-    assert SUPPORTED_PROVIDERS == ("openai",)
+def test_supported_providers_includes_openai_and_ollama():
+    assert set(SUPPORTED_PROVIDERS) == {"openai", "ollama"}
+
+
+def test_build_client_openai_uses_default_endpoint(monkeypatch):
+    """`_build_client('openai')` returns a cloud-OpenAI client (no
+    base_url override). Uses stub to avoid needing OPENAI_API_KEY."""
+    import openai
+    captured = {}
+
+    class _StubOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(openai, "OpenAI", _StubOpenAI)
+    _agent._build_client("openai")
+    assert "base_url" not in captured
+
+
+def test_build_client_ollama_points_at_local_endpoint(monkeypatch):
+    """`_build_client('ollama')` returns an openai-SDK client wired
+    to `localhost:11434/v1` with a dummy api_key."""
+    import openai
+    captured = {}
+
+    class _StubOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    monkeypatch.setattr(openai, "OpenAI", _StubOpenAI)
+    _agent._build_client("ollama")
+    assert captured["base_url"] == "http://localhost:11434/v1"
+    assert captured["api_key"] == "ollama"
 
 
 def test_default_max_iterations_is_reasonable():

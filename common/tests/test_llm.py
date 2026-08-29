@@ -14,7 +14,9 @@ from common.llm import (
     GeminiLLM,
     LLMResponse,
     MockLLM,
+    OllamaLLM,
     OpenAILLM,
+    _autodetect_provider,
     get_anthropic_llm,
     get_gemini_llm,
     get_llm,
@@ -240,7 +242,7 @@ def test_default_models_covers_every_real_provider():
     """Every non-mock provider get_llm() supports must have a DEFAULT_MODELS
     entry, or resolve_model() would raise for a provider get_llm() accepts --
     an inconsistency that would only surface at call time, not import time."""
-    assert set(DEFAULT_MODELS) == {"openai", "anthropic", "gemini"}
+    assert set(DEFAULT_MODELS) == {"openai", "anthropic", "gemini", "ollama"}
 
 
 # ---------- GeminiLLM + factory routing ----------
@@ -278,3 +280,86 @@ def test_gemini_llm_class_exists_and_is_lazy_importing():
     construct an instance (that would require google-genai installed)."""
     assert GeminiLLM is not None
     assert hasattr(GeminiLLM, "complete")
+
+
+# ---------- OllamaLLM + local-fallback autodetect ----------
+
+
+def test_ollama_llm_builds_openai_client_at_local_endpoint(monkeypatch):
+    """OllamaLLM wires the `openai` SDK against `localhost:11434/v1` and
+    passes a dummy `api_key='ollama'` per the Ollama OpenAI-compat
+    docs. Monkeypatches the OpenAI constructor to capture the args
+    instead of instantiating a real client."""
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    captured = {}
+
+    class _StubOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", _StubOpenAI)
+    OllamaLLM()
+    assert captured["base_url"] == "http://localhost:11434/v1"
+    assert captured["api_key"] == "ollama"
+
+
+def test_ollama_host_env_var_strips_trailing_v1(monkeypatch):
+    """OLLAMA_HOST with a trailing `/v1` already included must not
+    produce a double `/v1/v1`."""
+    monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434/v1")
+    captured = {}
+
+    class _StubOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", _StubOpenAI)
+    OllamaLLM()
+    assert captured["base_url"] == "http://localhost:11434/v1"
+
+
+def test_get_llm_falls_back_to_ollama_when_no_api_key_env(monkeypatch):
+    """LLM_PROVIDER unset AND no *_API_KEY set -> Ollama fallback."""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("NO_FALLBACK_BANNER", "1")
+
+    # Stub openai.OpenAI so no real client construction is attempted.
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", lambda **_kw: object())
+
+    llm = get_llm()
+    assert isinstance(llm, OllamaLLM)
+
+
+def test_get_llm_empty_api_key_treated_as_unset(monkeypatch):
+    """An empty-string OPENAI_API_KEY (e.g. `OPENAI_API_KEY=` in .env)
+    must not win autodetection; the chain continues past it."""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "  ")  # whitespace-only also skipped
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("NO_FALLBACK_BANNER", "1")
+
+    assert _autodetect_provider() == "ollama"
+
+
+def test_autodetect_prefers_openai_when_key_set(monkeypatch):
+    """Sanity check the positive path: a real OPENAI_API_KEY wins the
+    autodetection over the fallback."""
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-not-used-in-test")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    assert _autodetect_provider() == "openai"
+
+
+def test_ollama_in_default_models_registry():
+    """Regression guard: DEFAULT_MODELS must carry an entry for
+    'ollama' so `resolve_model('ollama')` works out of the box."""
+    assert "ollama" in DEFAULT_MODELS
+    assert resolve_model("ollama") == DEFAULT_MODELS["ollama"]
