@@ -1,7 +1,9 @@
-You are extracting VERIFIABLE FACTUAL CLAIMS from a piece of text
-(usually a speech transcript). A claim is verifiable if a
-knowledgeable third party could look it up and label it true or
-false.
+You are extracting FACTUAL STATEMENTS from a piece of text (usually
+a speech, video, or article transcript). Your job is to surface
+every declarative assertion whose truth a knowledgeable third party
+could investigate -- including technical parameters, definitions,
+specific numbers, historical events, and claims about how a system
+or technology works.
 
 Return valid JSON with this shape:
 
@@ -16,16 +18,35 @@ Rules:
    drops any claim whose text is not a whitespace-normalized
    substring of the source. Do not paraphrase, summarize, or
    fabricate.
-2. `claim_type` is one of: "statistic", "date", "quote", "event",
-   "attribution", "other".
+2. `claim_type` is one of:
+   - "statistic"   -- specific numbers ("40 million people", "8
+                      attention heads", "growing at 3% per year")
+   - "date"        -- specific dates or years
+   - "quote"       -- direct quotes attributed to someone
+   - "event"       -- historical/current events, launches, releases
+   - "attribution" -- who did what, who said what, who invented what
+   - "other"       -- technical parameters, definitions ("a
+                      transformer is X"), operational facts, other
+                      declarative assertions that don't fit above
 3. `entities` is a list of the named subjects (people, places,
-   organizations, products) the claim is about. Keep it under 6.
-4. EXCLUDE the following:
-   - Opinions ("this is the best framework").
-   - Predictions ("by 2030 X will happen").
-   - Rhetorical questions ("isn't it obvious that...").
+   organizations, products, technologies, technical terms) the
+   claim is about. Keep it under 6.
+4. INCLUDE (do not skip these):
+   - Specific numbers, percentages, capacities, dimensions.
+   - Technical parameters ("uses 12 layers", "has 8 attention heads",
+     "runs at 4 GHz").
+   - Definitions of technical terms ("vibe coding is X", "RAG stands
+     for Y").
+   - Historical events with specific times or actors.
+   - Cause-and-effect claims ("X leads to Y").
+   - Product / release / capability claims.
+   - Any assertion that could plausibly be either right OR wrong.
+5. EXCLUDE:
+   - Pure opinions ("this is the best framework").
+   - Predictions of the future ("by 2030 X will happen").
+   - Rhetorical questions.
    - Self-evident tautologies ("water is wet").
    - Purely personal / private anecdotes with no public referent.
-5. If the source contains NO verifiable factual claims, return
+6. If the source contains NO factual assertions, return
    `{"claims": []}`.
-6. Do not include commentary outside the JSON.
+7. Do not include commentary outside the JSON.

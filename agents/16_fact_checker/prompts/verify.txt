@@ -4,8 +4,11 @@ of web search results.
 You will be given:
 - One CLAIM (verbatim from the source).
 - The named ENTITIES in the claim.
-- A numbered list of SEARCH RESULTS, each with title, URL, and
-  snippet.
+- A numbered list of SEARCH RESULTS from TWO passes:
+    (a) grounding queries about the entities / terms in the claim,
+        so you can learn what the terms mean if they are unfamiliar
+        (your training data may be older than the topic).
+    (b) specific queries about the claim itself.
 
 Return valid JSON with this shape:
 
@@ -20,18 +23,38 @@ Return valid JSON with this shape:
       ]
     }
 
-Verdict rubric:
+Verdict rubric (READ CAREFULLY):
 
-- "supported": snippets confirm the claim as stated. Requires
-  evidence[] non-empty and confidence in {high, medium}.
-- "contradicted": snippets say the claim is false or the current
-  value is different. Requires evidence[] non-empty and confidence
-  in {high, medium}.
-- "unclear": snippets are relevant but ambiguous, partial, or from
-  low-quality sources. Evidence[] can be empty or populated;
-  confidence typically "low" or "medium".
-- "unverifiable": no snippets are relevant to the claim. Evidence[]
-  MUST be empty. Confidence typically "low".
+- "supported": at least TWO independent snippets (different URLs,
+  ideally different domains) explicitly confirm the claim as stated.
+  Confidence high / medium. Evidence[] must include the confirming
+  quotes.
+
+- "contradicted": at least TWO independent snippets EXPLICITLY oppose
+  the claim (state the opposite, or provide the correct value that
+  differs). One snippet is NOT enough to call something contradicted.
+  Confidence high / medium. Evidence[] must include the opposing
+  quotes.
+  DO NOT mark "contradicted" if:
+    - The snippets simply do not mention the claim's topic
+      (that's "unverifiable", not "contradicted").
+    - You personally don't recognize a term in the claim
+      (the term may be newer than your training data -- use the
+      grounding-pass results to LEARN what it means, then adjudicate
+      only against what the snippets actually say).
+    - The snippets are ambiguous or only one snippet opposes.
+
+- "unclear": snippets are RELEVANT to the claim but ambiguous,
+  partial, mixed (one supports and one opposes), or from low-quality
+  sources. Evidence[] can be empty or partial; confidence typically
+  "low" or "medium".
+
+- "unverifiable": snippets do not cover the claim's key entities or
+  concept at all -- neither confirming nor opposing. Evidence[] MUST
+  be empty. Confidence "low".
+  This is the correct verdict for post-training-cutoff terms if the
+  grounding search failed to find them, OR for private / personal /
+  anecdotal claims with no public referent.
 
 Evidence rules:
 
@@ -40,7 +63,7 @@ Evidence rules:
   building the final verdict. Paraphrases are rejected.
 - The `source_url` MUST be one of the URLs from the search results.
   Do not invent URLs.
-- Include AT MOST 5 evidence entries. Prefer the two or three
-  strongest.
+- Include AT MOST 5 evidence entries. Prefer the strongest two or
+  three across DIFFERENT sources.
 
 Return only the JSON. No commentary.

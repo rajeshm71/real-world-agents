@@ -426,9 +426,23 @@ def _verify_claim(
     max_search_results: int,
     run_meta: dict[str, Any],
 ) -> ClaimVerdict:
-    query = _build_search_query(claim)
+    # Two-pass search: first ground the model on what the entities
+    # are (so a post-cutoff term isn't judged as wrong just because
+    # the model doesn't recognize it), then search for the specific
+    # claim.
+    grounding_query = _build_grounding_query(claim)
+    specific_query = _build_search_query(claim)
+    all_hits: list[SearchHit] = []
     try:
-        hits = search_client.search(query, max_results=max_search_results)
+        if grounding_query and grounding_query != specific_query:
+            grounding_hits = search_client.search(
+                grounding_query, max_results=max_search_results
+            )
+            all_hits.extend(grounding_hits)
+        specific_hits = search_client.search(
+            specific_query, max_results=max_search_results
+        )
+        all_hits.extend(specific_hits)
     except SearchAllUnavailable as exc:
         raise FactCheckError(
             f"search chain exhausted while verifying {claim.claim_id!r}: {exc}",
@@ -437,14 +451,15 @@ def _verify_claim(
     provider_used = getattr(search_client, "last_used_provider", None) or getattr(
         search_client, "provider_name", "ddg"
     )
-    # Key by URL, keeping the FIRST hit per URL. Two hits with the
-    # same URL (rare, but possible after a chain fallback) would
-    # otherwise let the second silently shadow the first, making an
-    # evidence quote from the first snippet unreachable.
+    # Dedupe by URL, keeping the FIRST hit per URL. Grounding hits
+    # come first so if the same URL surfaces in both passes, the
+    # grounding version wins (typically the more entity-focused
+    # snippet).
     hits_by_url_first: dict[str, SearchHit] = {}
-    for h in hits:
+    for h in all_hits:
         if h.url and h.url not in hits_by_url_first:
             hits_by_url_first[h.url] = h
+    hits = list(hits_by_url_first.values())
 
     if not hits:
         return ClaimVerdict(
@@ -526,6 +541,21 @@ def _verify_claim(
                 stage="verify", claim_id=claim.claim_id, raw_output=raw_text
             ),
         ) from exc
+
+
+def _build_grounding_query(claim: FactualClaim) -> str:
+    """Build a query that grounds the model on what the claim's
+    key entities / terms ARE, so a post-training-cutoff concept
+    (like a new tech term the model doesn't recognize) isn't judged
+    incorrectly for lack of context. Returns empty string when the
+    claim has no entities worth grounding."""
+    if not claim.entities:
+        return ""
+    # Take the two most-prominent entities and pair with a definitional
+    # cue so the search surfaces "what is X" style results, not just
+    # incidental mentions.
+    entities = claim.entities[:2]
+    return f"what is {' '.join(entities)} definition explanation"
 
 
 def _build_search_query(claim: FactualClaim) -> str:
