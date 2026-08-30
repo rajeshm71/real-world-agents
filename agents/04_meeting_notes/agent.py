@@ -389,12 +389,14 @@ def _build_agent(*, model: str, notes: str, provider: str = "openai"):
                 base_url=ollama_base_url(), api_key="ollama"
             ),
         )
-        # Ollama's num_predict defaults small (~128); the ReAct loop
-        # produces one JSON response per turn and the final structured
-        # MeetingSummary can be 1-2k tokens. 8192 leaves plenty of
-        # headroom. Temperature=0 for JSON reliability on the smaller
-        # local model.
-        agent_settings = ModelSettings(max_tokens=8192, temperature=0.0)
+        # Ollama's num_predict defaults small (~128). Give the ReAct
+        # loop headroom (16k) so grammar-constrained decoding for a
+        # multi-item MeetingSummary doesn't truncate mid-JSON.
+        # Temperature=0 for JSON reliability on the smaller model.
+        # (Non-strict schema was tried and rejected: gemma4:e4b then
+        # emits {"action_items": []} to take the easy path even when
+        # the transcript is full of commitments.)
+        agent_settings = ModelSettings(max_tokens=16384, temperature=0.0)
     else:
         model_arg = model
         agent_settings = None
@@ -425,16 +427,30 @@ def _build_agent(*, model: str, notes: str, provider: str = "openai"):
         context when picking the final `priority` field."""
         return _score_urgency_from(item_text)
 
-    agent_kwargs: dict = {
-        "name": "meeting-notes-agent",
-        "instructions": _load_system_prompt(),
-        "model": model_arg,
-        "tools": [
+    # Tool-use path is the pedagogical point on the cloud provider,
+    # but gemma4:e4b's tool-call loop with a strict json_schema output
+    # is unreliable: the model returns "Invalid JSON when parsing
+    # model output" once the conversation grows across several tool
+    # turns. Direct probes prove Ollama can produce a valid multi-item
+    # MeetingSummary in one shot, just not through the ReAct loop.
+    # For Ollama, skip the tools and let the model produce the
+    # structured output directly. The grounding tools stay wired on
+    # the cloud path.
+    tools = (
+        []
+        if provider == "ollama"
+        else [
             function_tool(extract_speakers),
             function_tool(extract_dates),
             function_tool(verify_excerpt),
             function_tool(score_urgency),
-        ],
+        ]
+    )
+    agent_kwargs: dict = {
+        "name": "meeting-notes-agent",
+        "instructions": _load_system_prompt(),
+        "model": model_arg,
+        "tools": tools,
         "output_type": MeetingSummary,
     }
     if agent_settings is not None:
