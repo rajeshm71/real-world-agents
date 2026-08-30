@@ -70,11 +70,7 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    # gemma4:e4b (catalog-wide Ollama default) hits max_tokens
-    # exhausted before response on multi-KB JD + resume prompts and
-    # can't reliably produce the nested _ScoringOutput schema. qwen2.5:7b
-    # handles the long structured extraction cleanly.
-    "ollama": "qwen2.5:7b",
+    "ollama": "gemma4:e4b",
 }
 _DEFAULT_MODEL = _DEFAULT_MODEL_BY_PROVIDER["openai"]  # backcompat re-export
 _SUPPORTED_SUFFIXES = (".pdf", ".docx", ".md", ".txt")
@@ -279,11 +275,12 @@ def _build_agent(*, model: str, provider: str = "openai"):
             ),
         )
         # PydanticAI's OllamaModel treats max_tokens as an overall
-        # context cap (prompt + response), not just the response cap
-        # -- so give it enough room for JD + resume + system prompt +
-        # structured-output overhead + response. 8192 comfortably fits
-        # gemma4:e4b's window.
-        settings: Any = ModelSettings(max_tokens=8192)
+        # context cap (prompt + response), not just the response cap.
+        # Verified: JD (~1.6k chars) + a longer resume (~1.4k chars)
+        # + system prompt + structured-output overhead pushes past
+        # 8192 tokens under gemma4:e4b's tokenizer. 16384 leaves
+        # comfortable headroom.
+        settings: Any = ModelSettings(max_tokens=16384)
     else:
         model_arg = model
         settings = None
@@ -544,6 +541,24 @@ def _translate_api_error(
     from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
     if is_ollama_connection_error(exc):
         return ScreenerError(OLLAMA_CONNECTION_HINT, partial=partial)
+    # Ollama token-limit and "exceeded max output retries" errors on
+    # gemma4:e4b -> point the user at a stronger local model rather
+    # than a raw stack trace. Verified: gemma4:e4b hits max_tokens
+    # or produces malformed structured output on ~2/3 of resumes
+    # against realistic JDs. qwen2.5:7b handles the task reliably.
+    if (
+        "unexpectedmodelbehavior" in exc_class_name
+        or "token limit" in message_lower
+        or "exceeded maximum output retries" in message_lower
+    ):
+        return ScreenerError(
+            f"LLM couldn't produce a valid scorecard for {resume_id!r} "
+            "on this input. On Ollama, gemma4:e4b (the default) can't "
+            "reliably score longer resume+JD prompts under the strict "
+            "scorecard schema. Try `--model qwen2.5:7b` (run "
+            "`ollama pull qwen2.5:7b` if needed).",
+            partial=partial,
+        )
     return ScreenerError(
         f"LLM call failed for resume {resume_id!r}: "
         f"{type(exc).__name__}: {exc}.",

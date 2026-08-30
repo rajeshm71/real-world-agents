@@ -80,12 +80,7 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    # #08 needs reliable multi-turn tool use for its
-    # draft-execute-refine loop. gemma4:e4b (the catalog-wide Ollama
-    # default) hits MaxTurnsExceeded on ~2/3 of test modules under
-    # the ReAct loop. qwen2.5:7b handles tool calls reliably and
-    # completes in 15-30s. Override with --model to swap.
-    "ollama": "qwen2.5:7b",
+    "ollama": "gemma4:e4b",
 }
 
 DEFAULT_MAX_ITERATIONS = 5
@@ -556,6 +551,22 @@ def _translate_api_error(exc: Exception) -> TestGeneratorError:
     from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
     if is_ollama_connection_error(exc):
         return TestGeneratorError(OLLAMA_CONNECTION_HINT)
+    # Ollama ReAct-loop failures on gemma4:e4b (Invalid JSON /
+    # MaxTurnsExceeded on modules bigger than a few methods). Verified
+    # across 4+ consecutive runs. qwen2.5:7b handles the ReAct loop
+    # reliably.
+    if (
+        "modelbehaviorerror" in exc_class_name
+        or "maxturnsexceeded" in exc_class_name
+        or "invalid json" in message_lower
+    ):
+        return TestGeneratorError(
+            f"Generation failed: {type(exc).__name__}: {exc}. "
+            "On Ollama, gemma4:e4b (the default) can't reliably drive "
+            "the ReAct tool-use loop for modules with more than a "
+            "handful of methods. Try `--model qwen2.5:7b` (run "
+            "`ollama pull qwen2.5:7b` if needed)."
+        )
 
     return TestGeneratorError(
         f"Generation failed: {type(exc).__name__}: {exc}. "
