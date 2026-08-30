@@ -285,11 +285,20 @@ def _run_pytest_in_sandbox(
                 tests_failed=failed,
             )
         except subprocess.TimeoutExpired as exc:
-            # TimeoutExpired's stdout/stderr are bytes-or-None; coerce
-            # to str for the model. Append a plain-English marker so the
-            # LLM can see the timeout as text, not just via timed_out.
-            partial_stdout = exc.stdout.decode("utf-8", errors="replace") if exc.stdout else ""
-            partial_stderr = exc.stderr.decode("utf-8", errors="replace") if exc.stderr else ""
+            # TimeoutExpired's stdout/stderr are str when subprocess.run
+            # was called with text=True (which we did above), and
+            # bytes-or-None otherwise. Handle both defensively so the
+            # LLM always gets a str. Append a plain-English marker so
+            # the model sees the timeout as text, not just via timed_out.
+            def _to_str(x: bytes | str | None) -> str:
+                if not x:
+                    return ""
+                if isinstance(x, bytes):
+                    return x.decode("utf-8", errors="replace")
+                return x
+
+            partial_stdout = _to_str(exc.stdout)
+            partial_stderr = _to_str(exc.stderr)
             return TestExecutionResult(
                 exit_code=-1,
                 stdout=partial_stdout,
@@ -438,6 +447,13 @@ def generate_tests(
         raise _translate_api_error(exc) from exc
 
     generated: GeneratedTest = result.final_output_as(GeneratedTest)
+    # tests_added is a model-provided field; the model often mis-counts
+    # (reports 0 while the generated code actually contains 5 test
+    # functions). Overwrite from the real count so downstream code +
+    # the UI never trust the model's number.
+    actual = _count_test_functions(generated.test_code)
+    if actual != generated.tests_added:
+        generated = generated.model_copy(update={"tests_added": actual})
     return generated
 
 
@@ -475,9 +491,12 @@ def _build_agent(
     else:
         model_arg = model
 
-    def list_public_symbols(source_code_input: str) -> list[str]:
-        """List public top-level `def` and `class` names from a Python source string. Call this first to discover what to test."""
-        return _list_public_symbols_impl(source_code_input)
+    def list_public_symbols() -> list[str]:
+        """List public top-level `def` and `class` names from the
+        target source module. Call this first to discover what to
+        test. Takes no arguments -- the source is already in the
+        tool's closure, no need to paste it back."""
+        return _list_public_symbols_impl(source_code)
 
     def check_syntax(test_code: str) -> str:
         """Return "OK" if the given Python test_code parses, or a SyntaxError message. Cheap pre-flight before execute_test_code."""
