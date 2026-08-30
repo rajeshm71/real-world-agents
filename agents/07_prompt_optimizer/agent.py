@@ -206,7 +206,15 @@ def optimize_prompt(
             f"Expected one of {OPTIMIZER_EFFORT_LEVELS}."
         )
 
-    resolved_model = model or resolve_model(resolved_provider)
+    # #07 needs a vision-capable model that can actually read receipt
+    # images. gemma4:e4b (the catalog-wide Ollama default) returns
+    # all-nulls on CORD receipts -- GEPA then has no signal to
+    # optimize. qwen2.5vl:7b hits ~80% on total/subtotal, so it's the
+    # per-agent Ollama default here. Override with --model to swap.
+    if resolved_provider == "ollama" and not model:
+        resolved_model = "qwen2.5vl:7b"
+    else:
+        resolved_model = model or resolve_model(resolved_provider)
     baseline_prompt = _load_receipt_extractor_prompt()
 
     # Load the eval cases before importing dspy so a bad cases file
