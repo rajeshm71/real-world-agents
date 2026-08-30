@@ -251,7 +251,21 @@ def optimize_prompt(
         metric = _build_metric(run_eval=run_eval)
         trainset, valset = _cases_to_dspy_examples(dspy=dspy, cases=cases)
 
-        optimizer = dspy.GEPA(metric=metric, auto=optimizer_effort)
+        # GEPA needs a "reflection" LM: a second model that reads eval
+        # results and proposes new instructions. DSPy 3.x requires this
+        # explicitly (older versions defaulted to the program's LM).
+        # Reuse the same LM as the program: keeps the run single-model
+        # (no extra key / no extra download), at the cost of asking
+        # the same model to critique its own outputs. For a stronger
+        # reflection loop, swap in a larger model here.
+        reflection_lm = _build_reflection_lm(
+            dspy=dspy, provider=provider, model=resolved_model
+        )
+        optimizer = dspy.GEPA(
+            metric=metric,
+            auto=optimizer_effort,
+            reflection_lm=reflection_lm,
+        )
         compiled = optimizer.compile(program, trainset=trainset, valset=valset)
     except PromptOptimizerError:
         raise
@@ -298,6 +312,19 @@ def optimize_prompt(
 # --- DSPy program construction --------------------------------------------
 
 
+def _build_reflection_lm(*, dspy, provider: str, model: str):
+    """Build a dspy.LM instance for GEPA's reflection step. Uses the
+    same provider/model as the program under test; keeps the run
+    single-model. For a stronger reflection loop, swap for a larger
+    model or a different provider."""
+    litellm_prefix = _LITELLM_PROVIDER_PREFIX[provider]
+    lm_kwargs: dict = {}
+    if provider == "ollama":
+        from common.llm import ollama_base_url
+        lm_kwargs["api_base"] = ollama_base_url().removesuffix("/v1")
+    return dspy.LM(f"{litellm_prefix}/{model}", **lm_kwargs)
+
+
 def _build_program(*, dspy, provider: str, model: str, baseline_prompt: str):
     """Build a DSPy Predict program whose Signature exposes exactly the
     four scored fields. Configures dspy.LM against the resolved
@@ -318,29 +345,42 @@ def _build_program(*, dspy, provider: str, model: str, baseline_prompt: str):
         lm_kwargs["api_base"] = ollama_base_url().removesuffix("/v1")
     dspy.configure(lm=dspy.LM(f"{litellm_prefix}/{model}", **lm_kwargs))
 
-    # Signature docstring becomes the base instructions the optimizer
-    # iterates on. Seeded with the current hand-written prompt so GEPA
-    # has a real starting point rather than the empty string.
-    class ReceiptExtractionSignature(dspy.Signature):
-        __doc__ = baseline_prompt
-
-        receipt_image: dspy.Image = dspy.InputField(  # type: ignore[valid-type]
-            desc="Photo or scan of a receipt or invoice."
-        )
-        total: float = dspy.OutputField(
-            desc="Final amount the customer paid, including tax and tip."
-        )
-        subtotal: float | None = dspy.OutputField(
-            desc="Pre-tax total if printed; null if not shown."
-        )
-        tax_total: float | None = dspy.OutputField(
-            desc="Total tax amount if printed as its own line; null if not shown."
-        )
-        line_items_count: int = dspy.OutputField(
-            desc="Number of distinct line items on the receipt."
-        )
-
-    return dspy.Predict(ReceiptExtractionSignature)
+    # Construct the Signature via dspy.Signature(...)'s dict form
+    # rather than a class body. Under `from __future__ import
+    # annotations` (in effect module-wide here), class-body annotations
+    # become forward-reference strings that Pydantic tries to resolve
+    # against module globals -- and `dspy` is only a local variable in
+    # this function's scope, so `dspy.Image` fails to resolve. The
+    # dict form passes the types directly and sidesteps annotation
+    # evaluation entirely.
+    fields = {
+        "receipt_image": (
+            dspy.Image,
+            dspy.InputField(desc="Photo or scan of a receipt or invoice."),
+        ),
+        "total": (
+            float,
+            dspy.OutputField(
+                desc="Final amount the customer paid, including tax and tip."
+            ),
+        ),
+        "subtotal": (
+            float | None,
+            dspy.OutputField(desc="Pre-tax total if printed; null if not shown."),
+        ),
+        "tax_total": (
+            float | None,
+            dspy.OutputField(
+                desc="Total tax amount if printed as its own line; null if not shown."
+            ),
+        ),
+        "line_items_count": (
+            int,
+            dspy.OutputField(desc="Number of distinct line items on the receipt."),
+        ),
+    }
+    signature = dspy.Signature(fields, baseline_prompt)
+    return dspy.Predict(signature)
 
 
 def _cases_to_dspy_examples(*, dspy, cases: list[dict]) -> tuple[list, list]:
