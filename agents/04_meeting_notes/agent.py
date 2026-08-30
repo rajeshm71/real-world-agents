@@ -93,9 +93,16 @@ MIN_NOTES_CHARS = 200  # below this, treat as not-a-real-meeting (R5 case 1)
 
 # Commitment verbs are what distinguish "meeting notes" from "random
 # text." At least one must appear in the input for R5 case 1 to pass.
+# Contractions (I'll, we'll, we'd) and informal forms (gonna, gotta,
+# have to, has to) are common in real transcripts and count too --
+# without them, natural spoken-word notes get rejected before the
+# LLM sees them.
 _COMMITMENT_VERBS_RE = re.compile(
-    r"\b(will|need to|going to|owns?|assigned to|to-do|todo|action item|follow up|follow-up|"
-    r"agreed to|promised to|committed to|responsible for)\b",
+    r"(?:\b(will|need to|needs to|going to|gonna|gotta|have to|has to|owns?|"
+    r"assigned to|to-do|todo|action item|follow up|follow-up|"
+    r"agreed to|promised to|committed to|responsible for|"
+    r"i'll|we'll|you'll|they'll|he'll|she'll|i'd|we'd|you'd|"
+    r"let's|let me)\b)",
     re.IGNORECASE,
 )
 
