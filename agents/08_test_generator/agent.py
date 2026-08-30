@@ -80,7 +80,12 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    "ollama": "gemma4:e4b",
+    # #08 needs reliable multi-turn tool use for its
+    # draft-execute-refine loop. gemma4:e4b (the catalog-wide Ollama
+    # default) hits MaxTurnsExceeded on ~2/3 of test modules under
+    # the ReAct loop. qwen2.5:7b handles tool calls reliably and
+    # completes in 15-30s. Override with --model to swap.
+    "ollama": "qwen2.5:7b",
 }
 
 DEFAULT_MAX_ITERATIONS = 5
