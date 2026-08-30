@@ -480,15 +480,32 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
 
     # Tasks: each agent gets one Task. Sequential Process passes each
     # Task's output as context to the next Task automatically.
+    # Pre-format initial_sources so the researcher has the corpus
+    # in-hand and doesn't have to depend on a tool call to discover
+    # what search would return. This matters on smaller local models
+    # (gemma4:e4b via Ollama) where the researcher would otherwise
+    # hallucinate URLs and titles from thin air rather than reliably
+    # invoke search_topic.
+    initial_sources_block = "\n".join(
+        f"- URL: {s.url} | Title: {s.title} | Snippet: {s.snippet}"
+        for s in initial_sources
+    )
     research_task = Task(
         description=(
-            f"Research the topic: {topic}. Use the search_topic tool "
-            "to gather 3-5 credible sources. For each source, note the "
-            "URL, title, and a verbatim snippet supporting a key fact. "
-            "Output a bullet list of sources and a bullet list of the "
-            "key facts you'll pass to the writer."
+            f"Research the topic: {topic}.\n\n"
+            f"You already have these seed sources from the search index:\n"
+            f"{initial_sources_block}\n\n"
+            "Copy the URL, Title, and Snippet for each source VERBATIM "
+            "into your output -- do not invent URLs or paraphrase snippets. "
+            "You may call the search_topic tool to gather additional "
+            "sources beyond these seeds if needed. Then write a bullet "
+            "list of the key facts you'll pass to the writer."
         ),
-        expected_output="A markdown-formatted list of sources and key facts.",
+        expected_output=(
+            "A markdown list preserving each source's URL, Title, and "
+            "verbatim Snippet from the seed set, followed by a bullet "
+            "list of key facts."
+        ),
         agent=researcher,
     )
     write_task = Task(
@@ -504,19 +521,23 @@ def _build_crew(*, topic: str, model: str, max_iter: int, initial_sources: list[
     )
     edit_task = Task(
         description=(
-            "Edit and fact-check the writer's brief. For each factual "
-            "claim, use verify_source_citation to confirm the supporting "
-            "excerpt actually appears in the researcher's sources. Remove "
-            "any claim that can't be verified. Tighten prose. Output the "
-            "final ResearchBrief with sources_used containing only "
-            "verified sources."
+            "Edit and fact-check the writer's brief against the "
+            "researcher's original source list. For each factual claim, "
+            "use verify_source_citation to confirm the supporting excerpt "
+            "actually appears in the researcher's sources. Remove any "
+            "claim that can't be verified. Tighten prose. For sources_used, "
+            "copy the URL and title VERBATIM from the researcher's source "
+            "list -- do not invent URLs, titles, or paraphrase snippets. "
+            "Output the final ResearchBrief with sources_used containing "
+            "only verified sources."
         ),
         expected_output=(
             "A ResearchBrief object with topic, summary, background, "
-            "key_findings, implications, sources_used, word_count."
+            "key_findings, implications, sources_used (URLs and titles "
+            "copied verbatim from the researcher's list), word_count."
         ),
         agent=editor,
-        context=[write_task],
+        context=[research_task, write_task],
         output_pydantic=ResearchBrief,
     )
 
