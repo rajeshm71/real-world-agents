@@ -70,7 +70,11 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    "ollama": "gemma4:e4b",
+    # gemma4:e4b (catalog-wide Ollama default) hits max_tokens
+    # exhausted before response on multi-KB JD + resume prompts and
+    # can't reliably produce the nested _ScoringOutput schema. qwen2.5:7b
+    # handles the long structured extraction cleanly.
+    "ollama": "qwen2.5:7b",
 }
 _DEFAULT_MODEL = _DEFAULT_MODEL_BY_PROVIDER["openai"]  # backcompat re-export
 _SUPPORTED_SUFFIXES = (".pdf", ".docx", ".md", ".txt")
@@ -381,6 +385,29 @@ def screen_candidates(
     )
 
 
+_QUOTE_TRIM_CHARS = " \t\r\n.,;:!?\"'()[]"
+
+
+def _repair_quote(quoted: str, resume_text: str) -> str:
+    """Return a version of `quoted` that is a whitespace-normalized
+    substring of `resume_text`, or empty string if no repair works.
+    LLMs commonly add/normalize trailing punctuation on quoted excerpts;
+    strip such padding progressively until the quote matches, or give up."""
+    candidate = quoted
+    # First try as-is.
+    normalized_resume = re.sub(r"\s+", " ", resume_text).strip()
+    if re.sub(r"\s+", " ", candidate).strip() in normalized_resume:
+        return candidate
+    # Strip trailing then leading punctuation/whitespace and retry.
+    trimmed = candidate.strip(_QUOTE_TRIM_CHARS)
+    if trimmed and re.sub(r"\s+", " ", trimmed).strip() in normalized_resume:
+        return trimmed
+    return ""
+
+
+_SCORE_ONE_MAX_ATTEMPTS = 3
+
+
 def _score_one(
     agent: Any, *, job_description: str, resume: ResumeInput
 ) -> CandidateScorecard:
@@ -388,10 +415,68 @@ def _score_one(
     fields (resume_id/name/text) onto the model's scoring output to
     build the full CandidateScorecard, then Pydantic re-validates the
     complete shape (evidence-substring, dimensions-exact-three,
-    overall-near-mean, rec-matches-rubric)."""
+    overall-near-mean, rec-matches-rubric).
+
+    PydanticAI's `retries` param only covers _ScoringOutput schema
+    validation. CandidateScorecard's cross-field validators
+    (overall-near-mean, evidence-substring) run AFTER the agent
+    returns, so a model that games the schema (e.g. all dims=39 with
+    overall=81) escapes PydanticAI's retry loop. Wrap the whole call
+    in a Python-side retry so those failures get another shot too."""
     user_prompt = _format_user_prompt(job_description, resume)
+    last_exc: Exception | None = None
+    for attempt in range(_SCORE_ONE_MAX_ATTEMPTS):
+        try:
+            return _score_one_attempt(agent, user_prompt, resume)
+        except Exception as exc:
+            # Catch both post-agent ScreenerError (cross-field
+            # validation) and PydanticAI's UnexpectedModelBehavior /
+            # ValidationError (raw output schema failures that got past
+            # PydanticAI's own retry cap). Anything else re-raises on
+            # the last attempt.
+            last_exc = exc
+            if attempt == _SCORE_ONE_MAX_ATTEMPTS - 1:
+                raise
+            continue
+    raise last_exc  # unreachable but keeps mypy happy
+
+
+def _score_one_attempt(
+    agent: Any, user_prompt: str, resume: ResumeInput
+) -> CandidateScorecard:
     result = agent.run_sync(user_prompt)
     scoring: _ScoringOutput = result.output
+    # Repair evidence quotes: LLMs (verified on qwen2.5:7b) often
+    # append/normalize trailing punctuation on quoted excerpts --
+    # "some Python (self-taught, mostly scripts)." when the resume
+    # actually ends "..., Git." The verbatim-substring validator on
+    # CandidateScorecard then fails. Trim trailing/leading punctuation
+    # and check again; if still not a substring, drop the evidence
+    # entry rather than fail the whole scorecard.
+    for dim in scoring.dimensions:
+        dim.evidence = [
+            EvidenceExcerpt(quoted_text=repaired)
+            for repaired in (
+                _repair_quote(e.quoted_text, resume.resume_text)
+                for e in dim.evidence
+            )
+            if repaired
+        ]
+        # If all evidence for a positive-scored dimension got dropped
+        # during repair, downgrade the score below the evidence-required
+        # threshold (40) so the DimensionScore validator doesn't fail
+        # the whole scorecard.
+        if dim.score >= 40 and not dim.evidence:
+            dim.score = 39
+    # recommendation is a deterministic function of overall_score
+    # (rubric: >=80 strong_yes, 60-79 yes, 40-59 borderline, <40 no).
+    # Trusting the model's answer here invites off-by-one contradictions
+    # (verified: qwen2.5:7b returned recommendation='yes' with overall=83,
+    # which the CandidateScorecard validator then rejected). Compute
+    # it ourselves. The model still returns a value in the raw output
+    # -- keeps the schema shape stable across providers -- but we
+    # discard it in favor of the rubric.
+    correct_recommendation = _recommendation_for(scoring.overall_score)
     try:
         return CandidateScorecard(
             resume_id=resume.resume_id,
@@ -400,7 +485,7 @@ def _score_one(
             dimensions=scoring.dimensions,
             overall_score=scoring.overall_score,
             overall_rationale=scoring.overall_rationale,
-            recommendation=scoring.recommendation,
+            recommendation=correct_recommendation,
         )
     except ValidationError as exc:
         raise ScreenerError(
