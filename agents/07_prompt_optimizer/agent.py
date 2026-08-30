@@ -330,6 +330,11 @@ def _build_reflection_lm(*, dspy, provider: str, model: str):
     if provider == "ollama":
         from common.llm import ollama_base_url
         lm_kwargs["api_base"] = ollama_base_url().removesuffix("/v1")
+        # Ollama defaults num_ctx=4096. Vision inputs push individual
+        # requests past that ceiling on larger CORD receipts, which
+        # crashes GEPA's rollout bookkeeping with an IndexError.
+        # 16384 comfortably fits image + prompt + response.
+        lm_kwargs["num_ctx"] = 16384
     return dspy.LM(f"{litellm_prefix}/{model}", **lm_kwargs)
 
 
