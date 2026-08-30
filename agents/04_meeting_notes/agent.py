@@ -374,7 +374,7 @@ def _build_agent(*, model: str, notes: str, provider: str = "openai"):
 
     Lazy import: openai-agents is heavy; only pulled in on real-provider
     runs (mock path skips this factory entirely)."""
-    from agents import Agent, function_tool
+    from agents import Agent, ModelSettings, function_tool
 
     if provider == "ollama":
         from agents.models.openai_chatcompletions import (
@@ -389,8 +389,15 @@ def _build_agent(*, model: str, notes: str, provider: str = "openai"):
                 base_url=ollama_base_url(), api_key="ollama"
             ),
         )
+        # Ollama's num_predict defaults small (~128); the ReAct loop
+        # produces one JSON response per turn and the final structured
+        # MeetingSummary can be 1-2k tokens. 8192 leaves plenty of
+        # headroom. Temperature=0 for JSON reliability on the smaller
+        # local model.
+        agent_settings = ModelSettings(max_tokens=8192, temperature=0.0)
     else:
         model_arg = model
+        agent_settings = None
 
     def extract_speakers() -> list[str]:
         """Return a list of speaker/participant names extracted from the
@@ -418,18 +425,21 @@ def _build_agent(*, model: str, notes: str, provider: str = "openai"):
         context when picking the final `priority` field."""
         return _score_urgency_from(item_text)
 
-    return Agent(
-        name="meeting-notes-agent",
-        instructions=_load_system_prompt(),
-        model=model_arg,
-        tools=[
+    agent_kwargs: dict = {
+        "name": "meeting-notes-agent",
+        "instructions": _load_system_prompt(),
+        "model": model_arg,
+        "tools": [
             function_tool(extract_speakers),
             function_tool(extract_dates),
             function_tool(verify_excerpt),
             function_tool(score_urgency),
         ],
-        output_type=MeetingSummary,
-    )
+        "output_type": MeetingSummary,
+    }
+    if agent_settings is not None:
+        agent_kwargs["model_settings"] = agent_settings
+    return Agent(**agent_kwargs)
 
 
 # --- Error translation (R5 case 3) -----------------------------------------
