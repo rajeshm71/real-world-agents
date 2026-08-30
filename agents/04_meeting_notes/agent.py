@@ -91,20 +91,6 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 DEFAULT_MAX_TURNS = 15  # ReAct turn cap; beyond this the model is stuck
 MIN_NOTES_CHARS = 200  # below this, treat as not-a-real-meeting (R5 case 1)
 
-# Commitment verbs are what distinguish "meeting notes" from "random
-# text." At least one must appear in the input for R5 case 1 to pass.
-# Contractions (I'll, we'll, we'd) and informal forms (gonna, gotta,
-# have to, has to) are common in real transcripts and count too --
-# without them, natural spoken-word notes get rejected before the
-# LLM sees them.
-_COMMITMENT_VERBS_RE = re.compile(
-    r"(?:\b(will|need to|needs to|going to|gonna|gotta|have to|has to|owns?|"
-    r"assigned to|to-do|todo|action item|follow up|follow-up|"
-    r"agreed to|promised to|committed to|responsible for|"
-    r"i'll|we'll|you'll|they'll|he'll|she'll|i'd|we'd|you'd|"
-    r"let's|let me)\b)",
-    re.IGNORECASE,
-)
 
 # Speaker detection: matches "Name:" at the start of a line (common
 # transcription format), and "Name said/mentioned/asked/etc." (common
@@ -272,11 +258,12 @@ def _normalize_ws(s: str) -> str:
 
 
 def _looks_like_meeting_notes(notes: str) -> bool:
-    """R5 case 1 gate. Below MIN_NOTES_CHARS or no commitment verbs
-    -> not-a-real-meeting."""
-    if len(notes) < MIN_NOTES_CHARS:
-        return False
-    return bool(_COMMITMENT_VERBS_RE.search(notes))
+    """R5 case 1 gate. Cheap length check only -- anything under
+    MIN_NOTES_CHARS is too small to be real notes. Semantic
+    classification ("does this look like meeting notes?") is left to
+    the LLM: regex on keywords was tried and consistently rejected
+    real transcripts that used contractions or informal phrasing."""
+    return len(notes) >= MIN_NOTES_CHARS
 
 
 # --- Public API ------------------------------------------------------------
@@ -315,14 +302,13 @@ def extract_action_items(
     if resolved_provider == "mock":
         return _mock_result(notes)
 
-    # R5 case 1: notes too short or not a real meeting. Fails fast
+    # R5 case 1: notes too short to be a real meeting. Fails fast
     # before any Agent construction so bogus input costs nothing.
     if not _looks_like_meeting_notes(notes):
         raise MeetingNotesError(
-            f"Input doesn't look like meeting notes (got {len(notes)} chars, "
-            f"need at least {MIN_NOTES_CHARS}, and no commitment verbs "
-            "like 'will', 'agreed to', 'action item' detected). Paste real "
-            "meeting notes or a transcript."
+            f"Input is too short to be meeting notes (got {len(notes)} "
+            f"chars, need at least {MIN_NOTES_CHARS}). Paste real meeting "
+            "notes or a transcript."
         )
 
     resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(

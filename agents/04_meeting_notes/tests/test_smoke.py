@@ -124,17 +124,8 @@ def test_r5_case1_short_notes_rejected(monkeypatch):
     """Below MIN_NOTES_CHARS triggers rejection under non-mock
     provider (mock would short-circuit)."""
     monkeypatch.setenv("LLM_PROVIDER", "openai")
-    with pytest.raises(MeetingNotesError, match="doesn't look like meeting notes"):
+    with pytest.raises(MeetingNotesError, match="too short"):
         extract_action_items("too short")
-
-
-def test_r5_case1_no_commitment_verbs_rejected(monkeypatch):
-    """Above MIN_NOTES_CHARS but no commitment verbs -- treat as
-    not-a-real-meeting."""
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
-    text = "The weather today is nice. " * 30  # >200 chars, zero verbs
-    with pytest.raises(MeetingNotesError, match="doesn't look like meeting notes"):
-        extract_action_items(text)
 
 
 def test_r5_case1_message_names_thresholds(monkeypatch):
@@ -363,28 +354,12 @@ def test_looks_like_meeting_notes_short_rejected():
     assert _looks_like_meeting_notes("short") is False
 
 
-def test_looks_like_meeting_notes_no_verbs_rejected():
+def test_looks_like_meeting_notes_over_threshold_accepted():
+    """Any input at or above MIN_NOTES_CHARS is passed through --
+    semantic classification is the LLM's job, not a keyword regex."""
     text = "The weather today is nice. " * 30  # >200 chars, zero verbs
-    assert _looks_like_meeting_notes(text) is False
-
-
-def test_looks_like_meeting_notes_valid_accepted():
+    assert _looks_like_meeting_notes(text) is True
     assert _looks_like_meeting_notes(_REAL_NOTES) is True
-
-
-def test_looks_like_meeting_notes_various_verbs():
-    """Regression guard: any of the commitment verbs should trigger
-    acceptance, not just 'will'."""
-    base = "The meeting was long. " * 20  # >200 chars, no verbs baseline
-    for verb_phrase in [
-        "will do it",
-        "agreed to review",
-        "committed to send",
-        "responsible for the launch",
-        "action item: reply",
-        "follow up next week",
-    ]:
-        assert _looks_like_meeting_notes(base + verb_phrase) is True, verb_phrase
 
 
 # --- 6. _build_agent structural check --------------------------------------
