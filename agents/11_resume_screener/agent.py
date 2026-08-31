@@ -70,7 +70,12 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    "ollama": "gemma4:e4b",
+    # gemma4:e4b (catalog-wide Ollama default) verified to hit the
+    # token cap even at max_tokens=16384 on realistic JD+resume
+    # inputs (2/3 runs fail). qwen3.5:9b works but slower.
+    # qwen2.5:7b handles the task at 21-58s per resume. Override
+    # with --model to swap.
+    "ollama": "qwen2.5:7b",
 }
 _DEFAULT_MODEL = _DEFAULT_MODEL_BY_PROVIDER["openai"]  # backcompat re-export
 _SUPPORTED_SUFFIXES = (".pdf", ".docx", ".md", ".txt")
