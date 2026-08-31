@@ -9,8 +9,8 @@ Covers:
 1. Mock path returns a valid MeetingSummary (no SDK involved).
 2. R5 case 1 (notes-validation gate):
    - too-short input rejected
-   - long-but-no-commitment-verbs input rejected
-   - valid notes accepted (falls through to Agent construction)
+   - anything at/above MIN_NOTES_CHARS accepted (semantic
+     classification is the LLM's job, not a keyword regex)
 3. R5 case 2 (MaxTurnsExceeded):
    - simulate SDK raising MaxTurnsExceeded via monkeypatched Runner
      -> MeetingNotesError with .partial populated

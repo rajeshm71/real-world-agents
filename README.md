@@ -49,7 +49,15 @@ cd agents/01_receipt_extractor && uv run python -m agent path/to/receipt.jpg
 
 No API key is required to explore the code or run tests: every test suite runs under `LLM_PROVIDER=mock`. A key is only needed for a real (non-mock) call.
 
-**No API key at all? Run locally on your own hardware.** Install [Ollama](https://ollama.com/download), pull the default model (`ollama pull gemma4:e4b`), then run any covered agent with `LLM_PROVIDER=ollama`. Slower and less accurate than the paid providers, but zero-cost and works offline. Coverage today: #02, #03, #04, #05, #06, #08, #13, and #16 have been manually verified end-to-end on a local RTX 5050 (8 GB); #07 and #11 wire the provider through correctly but hit a smaller-model limit against the current schema/optimizer settings (#11's structured output is too complex for gemma4:e4b to emit reliably; #07 needs a separate reflection LM regardless of provider). The vision agents (#01, #09, #15) and Anthropic-native agents (#10, #14) still require their cloud providers.
+**No API key at all? Run locally on your own hardware.** Install [Ollama](https://ollama.com/download), pull the default model (`ollama pull gemma4:e4b`), then run any covered agent with `LLM_PROVIDER=ollama`. Slower and less accurate than the paid providers, but zero-cost and works offline. Coverage today: #02, #03, #04, #05, #06, #07, #08, #11, #13, and #16 — all manually verified end-to-end on a local RTX 5050 (8 GB). Three agents override the catalog-wide `gemma4:e4b` default because gemma4:e4b has verified capability gaps on those specific tasks; users can still swap with `--model gemma4:e4b`:
+
+- **#07 prompt_optimizer** → default `qwen2.5vl:7b` (vision required for CORD receipts; `ollama pull qwen2.5vl:7b`).
+- **#08 test_generator** → default `qwen2.5-coder:7b` (multi-turn ReAct tool use + richer test suites; `ollama pull qwen2.5-coder:7b`).
+- **#11 resume_screener** → default `qwen2.5:7b` (structured extraction over ~4KB JD+resume prompts; `ollama pull qwen2.5:7b`).
+
+For reasoning models (qwen3.5:9b, etc.) that get budget-exhausted producing `<think>` blocks over the OpenAI-compat surface, the repo ships `common/ollama_nothink_proxy.py` — a small stdlib shim that routes to Ollama's native `/api/chat` with `think=false`. Opt-in for experimentation.
+
+The vision agents (#01, #09, #15) and Anthropic-native agents (#10, #14) still require their cloud providers.
 
 ## Cost note
 
