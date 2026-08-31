@@ -80,13 +80,18 @@ SUPPORTED_PROVIDERS = ("openai", "ollama")
 
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-4o-mini",
-    # gemma4:e4b (catalog-wide Ollama default) verified across 4+
-    # runs to consistently hit MaxTurnsExceeded / Invalid JSON in
-    # this agent's ReAct tool-use loop on modules bigger than a few
-    # methods. qwen3.5:9b also failed (2/3 modules). qwen2.5:7b
-    # handles the loop reliably (3/3 modules, 15-30s each) so it's
-    # the per-agent Ollama default. Override with --model to swap.
-    "ollama": "qwen2.5:7b",
+    # gemma4:e4b (catalog-wide Ollama default) verified to
+    # consistently hit MaxTurnsExceeded / Invalid JSON in this
+    # agent's ReAct tool-use loop; qwen3.5:9b also failed on 2/3
+    # modules. Candidate shootout on 6 target modules
+    # (sample_module, rolling_window, path_utils, algo_paths,
+    # text_dedup, pricing):
+    #   qwen2.5:7b       -> reliable but leaner suites (5-9 tests)
+    #   qwen2.5-coder:7b -> reliable AND richer suites (6-13 tests),
+    #                       code-specialized, same 4.7 GB footprint.
+    # Coder wins on coverage without giving up reliability.
+    # Override with --model to swap.
+    "ollama": "qwen2.5-coder:7b",
 }
 
 DEFAULT_MAX_ITERATIONS = 5
