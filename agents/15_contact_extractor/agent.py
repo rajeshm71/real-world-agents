@@ -69,9 +69,16 @@ except ImportError:
 
 # --- Constants -------------------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai",)
+SUPPORTED_PROVIDERS = ("openai", "ollama")
 _DEFAULT_PROVIDER = "openai"
-_DEFAULT_MODEL = "gpt-4o-mini"
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    # Ollama needs a vision model; gemma4:e4b (catalog default) is
+    # weak on business-card OCR. qwen2.5vl:7b (6 GB) is the strongest
+    # local vision option under the 8 GB VRAM budget.
+    "ollama": "qwen2.5vl:7b",
+}
+_DEFAULT_MODEL = _DEFAULT_MODEL_BY_PROVIDER["openai"]  # backcompat re-export
 _SUPPORTED_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB -- OpenAI vision cap
 _EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
@@ -174,6 +181,7 @@ def _extract_raw(
     image: str | Path | bytes,
     *,
     model: str,
+    provider: str = "openai",
     _instructor_client: Any = None,
 ) -> list[RawContact]:
     """Instructor + vision. Returns an ordered list of RawContacts,
@@ -182,14 +190,28 @@ def _extract_raw(
     client = (
         _instructor_client
         if _instructor_client is not None
-        else _build_instructor(model=model)
+        else _build_instructor(model=model, provider=provider)
     )
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:image/{image_mime};base64,{b64}"
+    # response_model=list[RawContact] works fine on the cloud path
+    # (Instructor internally wraps as {"items": [...]} and unwraps).
+    # On Ollama, qwen2.5vl:7b sometimes emits {"cards": [...]} or
+    # {"contacts": [...]} instead of the expected {"items": [...]},
+    # and Instructor returns an empty list. Use an explicit wrapper
+    # class with a fixed key the model can be prompted to match.
+    from pydantic import BaseModel, Field
+
+    class _RawContactList(BaseModel):
+        cards: list[RawContact] = Field(
+            default_factory=list,
+            description="One RawContact per visible card in the image.",
+        )
+
     try:
-        raws = client.chat.completions.create(
+        response = client.chat.completions.create(
             model=model,
-            response_model=list[RawContact],
+            response_model=_RawContactList,
             messages=[
                 {"role": "system", "content": _load_system_prompt()},
                 {
@@ -197,7 +219,10 @@ def _extract_raw(
                     "content": [
                         {
                             "type": "text",
-                            "text": "Extract every visible contact card. Return one entry per card.",
+                            "text": (
+                                "Extract every visible contact card. Return one "
+                                "entry per card in the `cards` array."
+                            ),
                         },
                         {
                             "type": "image_url",
@@ -206,8 +231,9 @@ def _extract_raw(
                     ],
                 },
             ],
-            max_tokens=2048,
+            max_tokens=4096 if provider == "ollama" else 2048,
         )
+        raws = response.cards
     except Exception as exc:
         raise _translate_api_error(exc) from exc
     # Guard: ensure card_indexes are unique. If the model returned
@@ -221,10 +247,15 @@ def _extract_raw(
     return raws
 
 
-def _build_instructor(*, model: str) -> Any:
+def _build_instructor(*, model: str, provider: str = "openai") -> Any:
     """Build the Instructor client bound to the actual model the caller
     asked for. Retries once on structured-output validation failure so
-    the parse behavior mirrors #10 / #14's hand-rolled retry pattern."""
+    the parse behavior mirrors #10 / #14's hand-rolled retry pattern.
+
+    Provider "ollama" routes through instructor.from_openai with the
+    OpenAI client pointed at Ollama's OpenAI-compat surface -- Ollama
+    doesn't have a native Instructor prefix but its API is OpenAI-
+    shaped over HTTP."""
     try:
         import instructor
     except ImportError as exc:
@@ -232,6 +263,16 @@ def _build_instructor(*, model: str) -> Any:
             "instructor not installed. Run `uv sync --all-packages` from "
             "the repo root."
         ) from exc
+    if provider == "ollama":
+        from openai import OpenAI
+
+        from common.llm import ollama_base_url
+        client = OpenAI(base_url=ollama_base_url(), api_key="ollama")
+        # instructor.from_openai doesn't accept max_retries in the
+        # constructor -- pass it per-call instead (see caller in
+        # _extract_raw). max_retries kwarg on from_provider IS
+        # supported; keep it on the cloud path.
+        return instructor.from_openai(client, mode=instructor.Mode.JSON)
     return instructor.from_provider(f"openai/{model}", max_retries=1)
 
 
@@ -492,9 +533,14 @@ def extract_contacts(
     if resolved == "mock":
         return _mock_result(image, policy=policy, salt=salt)
 
-    resolved_model = model or _DEFAULT_MODEL
+    resolved_model = model or _DEFAULT_MODEL_BY_PROVIDER.get(resolved, _DEFAULT_MODEL)
     start = time.perf_counter()
-    raws = _extract_raw(image, model=resolved_model, _instructor_client=_instructor_client)
+    raws = _extract_raw(
+        image,
+        model=resolved_model,
+        provider=resolved,
+        _instructor_client=_instructor_client,
+    )
     extract_seconds = time.perf_counter() - start
 
     start = time.perf_counter()
@@ -551,6 +597,12 @@ def _translate_api_error(exc: Exception) -> ContactError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return ContactError(
+            OLLAMA_CONNECTION_HINT,
+            partial=ExtractionAttempt(stage="extract"),
+        )
     return ContactError(
         f"vision extraction failed: {type(exc).__name__}: {exc}.",
         partial=ExtractionAttempt(stage="extract"),

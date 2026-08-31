@@ -62,12 +62,17 @@ from common.llm import resolve_model
 
 # --- Provider + constants --------------------------------------------------
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
 _INSTRUCTOR_PROVIDER_PREFIX = {
     "openai": "openai",
     "anthropic": "anthropic",
     "gemini": "google",
 }
+
+# Per-provider model defaults. Ollama needs a vision model; gemma4:e4b
+# (catalog default) is weak on structured UI extraction. qwen2.5vl:7b
+# fits the 8 GB VRAM budget and is the strongest local vision option.
+_DEFAULT_MODEL_BY_PROVIDER = {"ollama": "qwen2.5vl:7b"}
 
 # Anthropic default: Claude's vision output for structured markup is
 # meaningfully better than OpenAI/Gemini's in practice. Every provider
@@ -196,7 +201,11 @@ def reconstruct(
             screenshot_bytes=screenshot_bytes, styling=styling
         )
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = (
+        model
+        or _DEFAULT_MODEL_BY_PROVIDER.get(resolved_provider)
+        or resolve_model(resolved_provider)
+    )
     client = _client if _client is not None else _get_real_client(
         resolved_provider, resolved_model
     )
@@ -204,9 +213,13 @@ def reconstruct(
     b64_data = base64.b64encode(screenshot_bytes).decode("ascii")
     content = _build_content(resolved_provider, media_type, b64_data, prompt)
 
+    # Ollama needs the explicit model= (instructor.from_openai doesn't
+    # bake it) plus more output headroom for JSX + tree structures.
+    max_tokens = 4096 if resolved_provider == "ollama" else DEFAULT_MAX_TOKENS
     try:
         result = client.create(
-            max_tokens=DEFAULT_MAX_TOKENS,
+            model=resolved_model,
+            max_tokens=max_tokens,
             max_retries=max_retries,
             response_model=ReconstructedComponent,
             messages=[{"role": "user", "content": content}],
@@ -259,6 +272,13 @@ def _get_real_client(provider: str, model: str):
     provider SDK installed."""
     import instructor
 
+    if provider == "ollama":
+        from openai import OpenAI
+
+        from common.llm import ollama_base_url
+        client = OpenAI(base_url=ollama_base_url(), api_key="ollama")
+        return instructor.from_openai(client, mode=instructor.Mode.JSON)
+
     instructor_prefix = _INSTRUCTOR_PROVIDER_PREFIX.get(provider)
     if instructor_prefix is None:
         raise ValueError(f"No Instructor provider mapping for {provider!r}")
@@ -292,6 +312,9 @@ def _translate_api_error(exc: Exception) -> ScreenshotToJsxError:
         return _rate_limit_error()
     if "authentication" in message_lower or "api key" in message_lower:
         return _auth_error()
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return ScreenshotToJsxError(OLLAMA_CONNECTION_HINT)
 
     return ScreenshotToJsxError(
         f"Reconstruction failed: {type(exc).__name__}: {exc}. "

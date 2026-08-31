@@ -384,8 +384,8 @@ def test_guess_media_type_defaults_to_png_on_unknown():
 # ---------- 7. Constants + examples sanity ----------
 
 
-def test_supported_providers_contains_the_three_expected():
-    assert set(SUPPORTED_PROVIDERS) == {"openai", "anthropic", "gemini"}
+def test_supported_providers_contains_the_expected_set():
+    assert set(SUPPORTED_PROVIDERS) == {"openai", "anthropic", "gemini", "ollama"}
 
 
 def test_default_styling_is_tailwind():

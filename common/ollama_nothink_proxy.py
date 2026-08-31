@@ -12,6 +12,12 @@ Supports:
 - POST /v1/chat/completions (JSON body: model, messages, temperature,
   max_tokens, response_format, tools) -- forwards to Ollama /api/chat
   with think=False, returns OpenAI-compat response shape.
+- Vision inputs: translates OpenAI-style multi-part content
+  ([{"type":"text",...}, {"type":"image_url",...}]) into Ollama's
+  native `content` + `images[]` format. Necessary because Ollama's
+  OpenAI-compat surface can't raise num_ctx per-request, so vision
+  requests hit the 4k default; going through this proxy sets
+  num_ctx=16384 automatically.
 - Streaming NOT supported (returns 400).
 """
 from __future__ import annotations
@@ -27,12 +33,44 @@ import uuid
 UPSTREAM = "http://localhost:11434"
 
 
+def _translate_messages(msgs: list[dict]) -> list[dict]:
+    """Translate OpenAI-style vision content (list of {type, text} /
+    {type, image_url}) to Ollama-native format (content string +
+    optional images array of raw base64). Text-only messages pass
+    through unchanged."""
+    out: list[dict] = []
+    for msg in msgs:
+        content = msg.get("content")
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            images: list[str] = []
+            for part in content:
+                ptype = part.get("type")
+                if ptype == "text":
+                    text_parts.append(part.get("text", ""))
+                elif ptype == "image_url":
+                    url = part.get("image_url", {}).get("url", "")
+                    # Accept data URLs (data:image/...;base64,XXXX) and
+                    # bare base64 -- Ollama wants the raw base64.
+                    if url.startswith("data:") and "base64," in url:
+                        images.append(url.split("base64,", 1)[1])
+                    else:
+                        images.append(url)
+            new_msg = {"role": msg["role"], "content": "\n".join(text_parts)}
+            if images:
+                new_msg["images"] = images
+            out.append(new_msg)
+        else:
+            out.append(msg)
+    return out
+
+
 def _openai_to_ollama(payload: dict) -> dict:
     """Translate an OpenAI /v1/chat/completions body to an Ollama
     /api/chat body with think=False."""
     body: dict = {
         "model": payload["model"],
-        "messages": payload["messages"],
+        "messages": _translate_messages(payload["messages"]),
         "stream": False,
         "think": False,
         "options": {},

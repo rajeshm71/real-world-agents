@@ -78,10 +78,18 @@ from common.llm import resolve_model
 
 # --- Provider + model resolution ---
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "gemini", "ollama")
 # Maps our LLM_PROVIDER values to Instructor's from_provider() prefix.
-# Only "gemini" differs (Instructor calls it "google").
+# Only "gemini" differs (Instructor calls it "google"). "ollama" is
+# not a from_provider prefix -- we route through instructor.from_openai
+# with a custom base_url instead (see _get_real_client).
 _INSTRUCTOR_PROVIDER_PREFIX = {"openai": "openai", "anthropic": "anthropic", "gemini": "google"}
+
+# Per-provider model defaults. Only ollama differs from resolve_model's
+# catalog default (gemma4:e4b) -- that model's vision returns all-nulls
+# on CORD receipts (verified against agent #07 as well). qwen2.5vl:7b
+# handles receipt OCR reliably at the same 8 GB VRAM budget.
+_DEFAULT_MODEL_BY_PROVIDER = {"ollama": "qwen2.5vl:7b"}
 
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_MAX_RETRIES = 3  # covers rate-limit blips + one schema-validation retry
@@ -180,7 +188,11 @@ def extract_receipt(
         # resolving a model / building a client just to throw it away.
         raise _pdf_unsupported_for_gemini_error()
 
-    resolved_model = model or resolve_model(resolved_provider)
+    resolved_model = (
+        model
+        or _DEFAULT_MODEL_BY_PROVIDER.get(resolved_provider)
+        or resolve_model(resolved_provider)
+    )
     client = _client if _client is not None else _get_real_client(resolved_provider, resolved_model)
     prompt = _load_prompt()
     b64_data = base64.b64encode(image_bytes).decode("ascii")
@@ -190,13 +202,23 @@ def extract_receipt(
     # across every provider (from_provider()'s whole point). Provider API
     # errors (rate limit / auth / 400) surface as exceptions we catch and
     # translate below.
+    # Ollama needs more output headroom -- receipts with many line
+    # items push the JSON payload past 2k tokens. Cloud providers do
+    # fine at the default; keep them unchanged.
+    max_tokens = 4096 if resolved_provider == "ollama" else DEFAULT_MAX_TOKENS
+    create_kwargs: dict = {
+        "model": resolved_model,
+        "max_tokens": max_tokens,
+        "max_retries": max_retries,
+        "response_model": ExtractedReceipt,
+        "messages": [{"role": "user", "content": content}],
+    }
     try:
-        result = client.create(
-            max_tokens=DEFAULT_MAX_TOKENS,
-            max_retries=max_retries,
-            response_model=ExtractedReceipt,
-            messages=[{"role": "user", "content": content}],
-        )
+        # instructor.from_provider() bakes the model into the client, so
+        # `model=` is normally optional on .create(). But instructor.from_openai
+        # (used for the Ollama path) does NOT bake it -- pass it explicitly
+        # so both paths work.
+        result = client.create(**create_kwargs)
     except Exception as exc:
         raise _translate_api_error(exc) from exc
 
@@ -317,6 +339,24 @@ def _translate_api_error(exc: Exception) -> ReceiptExtractionError:
     if "validation" in message_lower:
         return _build_validation_error(exc)
 
+    # Ollama down -- surface a clean hint instead of a raw httpx trace.
+    from common.llm import OLLAMA_CONNECTION_HINT, is_ollama_connection_error
+    if is_ollama_connection_error(exc):
+        return ReceiptExtractionError(OLLAMA_CONNECTION_HINT)
+    # Ollama's default context (4096 tokens) is too small for image
+    # inputs (typical receipt tokenizes to 5-6k). The OpenAI-compat
+    # surface ignores per-request options.num_ctx, so the raise has
+    # to happen at server startup. Give the user the fix instead of
+    # a raw JSON error blob.
+    if "exceed_context_size" in message_lower or "n_ctx" in message_lower:
+        return ReceiptExtractionError(
+            "Ollama's default context (4096 tokens) is too small for "
+            "this receipt image. Start Ollama with a larger context: "
+            "`OLLAMA_CONTEXT_LENGTH=16384 ollama serve`, then retry. "
+            "(This raises num_ctx globally on the Ollama server; it's "
+            "the only knob Ollama's OpenAI-compat surface honors.)"
+        )
+
     # Fallback: unknown error class. Preserve original message for debugging.
     return ReceiptExtractionError(
         f"Extraction failed: {type(exc).__name__}: {exc}. "
@@ -347,14 +387,23 @@ def _build_validation_error(exc: Exception) -> ReceiptExtractionError:
 
 
 def _get_real_client(provider: str, model: str):
-    """Build an Instructor client for `provider`/`model` via Instructor's
-    unified `from_provider()` interface. Imported lazily so tests running
-    under LLM_PROVIDER=mock never need `instructor` (or any provider SDK)
-    installed. Provider SDKs (openai/anthropic/google-genai) are only
-    imported transitively by instructor.from_provider() when actually
-    called with that provider's prefix.
+    """Build an Instructor client for `provider`/`model`. Cloud providers
+    (openai/anthropic/gemini) route through Instructor's unified
+    `from_provider()`. Ollama routes through `from_openai` with the
+    OpenAI client pointed at Ollama's OpenAI-compat surface -- Instructor
+    doesn't have a native "ollama/" prefix, but Ollama looks like OpenAI
+    over HTTP so from_openai is the right entry point. Imported lazily
+    so tests running under LLM_PROVIDER=mock never need `instructor`
+    (or any provider SDK) installed.
     """
     import instructor
+
+    if provider == "ollama":
+        from openai import OpenAI
+
+        from common.llm import ollama_base_url
+        client = OpenAI(base_url=ollama_base_url(), api_key="ollama")
+        return instructor.from_openai(client, mode=instructor.Mode.JSON)
 
     instructor_prefix = _INSTRUCTOR_PROVIDER_PREFIX.get(provider)
     if instructor_prefix is None:

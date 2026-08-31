@@ -402,8 +402,8 @@ def test_translator_generic():
 # --- 6. Constants + example sanity ----------------------------------------
 
 
-def test_supported_providers_openai_only():
-    assert SUPPORTED_PROVIDERS == ("openai",)
+def test_supported_providers_includes_openai_and_ollama():
+    assert SUPPORTED_PROVIDERS == ("openai", "ollama")
 
 
 def test_default_dedup_threshold_reasonable():
