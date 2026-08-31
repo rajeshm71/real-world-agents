@@ -202,10 +202,12 @@ def extract_receipt(
     # across every provider (from_provider()'s whole point). Provider API
     # errors (rate limit / auth / 400) surface as exceptions we catch and
     # translate below.
-    # Ollama needs more output headroom -- receipts with many line
-    # items push the JSON payload past 2k tokens. Cloud providers do
+    # Ollama needs more output headroom -- a complex receipt (many
+    # line items, or non-English text) pushes the JSON payload past
+    # the 2k default. Verified: cord_00 (10+ items) hits 4096; 8192
+    # comfortably fits every CORD case tested. Cloud providers do
     # fine at the default; keep them unchanged.
-    max_tokens = 4096 if resolved_provider == "ollama" else DEFAULT_MAX_TOKENS
+    max_tokens = 8192 if resolved_provider == "ollama" else DEFAULT_MAX_TOKENS
     create_kwargs: dict = {
         "model": resolved_model,
         "max_tokens": max_tokens,
