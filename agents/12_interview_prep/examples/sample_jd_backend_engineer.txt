@@ -1,0 +1,32 @@
+Senior Backend Engineer -- Payments Platform
+
+We're looking for a Senior Backend Engineer to join our Payments
+Platform team. You'll own services that process millions of dollars
+in transactions daily, working closely with product and compliance.
+
+Responsibilities:
+- Design and maintain REST APIs used by internal teams and partner
+  integrations, including versioning and backward-compatibility
+  strategy as the API evolves.
+- Own production reliability for your services: participate in an
+  on-call rotation, respond to incidents, and drive postmortems that
+  lead to concrete follow-up fixes.
+- Work with Postgres at scale: schema design, query optimization, and
+  safe migrations against tables with hundreds of millions of rows.
+- Collaborate with the compliance team to ensure new features meet
+  regulatory requirements (PCI-DSS, SOC 2).
+- Mentor junior engineers through code review and pairing.
+
+Requirements:
+- 5+ years of backend engineering experience, with at least 2 years
+  owning services in production at scale.
+- Strong experience designing and evolving REST APIs.
+- Hands-on production on-call experience, including writing or
+  contributing to postmortems.
+- Solid relational database experience (Postgres or similar).
+- Experience working in a regulated or compliance-sensitive
+  environment is a plus, not required.
+- Comfortable mentoring less experienced engineers.
+
+We value engineers who can explain tradeoffs clearly, not just recite
+technologies. Culture fit matters as much as technical depth.

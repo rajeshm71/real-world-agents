@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**15 agents shipped.** The v1 catalog covers structured extraction (#01, #09, #15), long-context single-pass (#02), state-machine agents (#03), ReAct with grounded tools (#04, #08), multi-agent collaboration (#05), type-safe dependency injection (#06), meta-optimization (#07), RAG with cross-field-verified citations (#10), batch + ranking (#11), the from-scratch agent loop (#13), audio pipelines (#14), and now live-web-search fact-checking with a local LLM (#16). One originally-planned slot (#12: interview prep) remains committed but unshipped; the roadmap table below lists it as such.
+**16 agents shipped -- the full v1 catalog is complete.** It covers structured extraction (#01, #09, #15), long-context single-pass (#02), state-machine agents (#03), ReAct with grounded tools (#04, #08), multi-agent collaboration (#05), type-safe dependency injection (#06), meta-optimization (#07), adaptive multi-turn dialogue (#12), RAG with cross-field-verified citations (#10), batch + ranking (#11), the from-scratch agent loop (#13), audio pipelines (#14), and live-web-search fact-checking with a local LLM (#16).
 
 ## Shipped agents
 
@@ -25,6 +25,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 09 | [Screenshot to React JSX](agents/09_screenshot_to_jsx/) | Multimodal structured extraction on a code domain (vision -> Pydantic-validated JSX) | Instructor + vision, multi-provider (Anthropic default) | N/A | First-draft React scaffolding from a design mockup or existing UI screenshot |
 | 10 | [Policy Q&A over handbook](agents/10_policy_qa/) | RAG with cross-field-verified citations, on-prem/private (embeddings never leave the box) | Plain Python + fastembed (local ONNX) + sqlite-vec (FAISS fallback) + Anthropic | N/A | HR internal Q&A tool, privacy-preserving |
 | 11 | [Resume screener](agents/11_resume_screener/) | Batch + ranking with evidence-cross-checked rationale over multi-format inputs (pdf/docx/md/txt) | PydanticAI + OpenAI (subset-schema pattern with caller-injected known fields) | N/A | HR/recruiting first-pass triage with per-candidate evidence and a ranked list |
+| 12 | [Interview prep agent](agents/12_interview_prep/) | Adaptive multi-turn dialogue with real-time answer assessment (conversation state threaded across separate agent invocations, not one tool-loop call) | OpenAI Agents SDK | N/A | Mock-interview practice grounded in a real job description's actual requirements |
 | 13 | [From-scratch agent loop](agents/13_from_scratch_loop/) | The tool-use agent loop, hand-rolled: what LangGraph / OpenAI Agents SDK / CrewAI / PydanticAI wrap, in one file | Plain Python + raw OpenAI Chat Completions (no framework) | N/A | Codebase Q&A over any local repository |
 | 14 | [Podcast episode processor](agents/14_podcast_processor/) | Three-stage audio pipeline: fetch (local or YouTube) -> local Whisper transcript -> LLM-generated chapters + summary + verbatim key quotes | Plain Python + faster-whisper (local ONNX/CT2) + yt-dlp + Anthropic | N/A | Podcast creators auto-generating chapter markers, summaries, and quote pull-outs |
 | 15 | [Contact / ID extractor](agents/15_contact_extractor/) | Batch vision extraction + embedding-based dedup + PII-safe redaction (per-field none/hash/redact policy with salted SHA-256) | Instructor + OpenAI vision + fastembed | N/A | KYC / CRM first-pass triage: one photo of a stack of cards -> deduplicated compliance-safe contact list |
@@ -32,11 +33,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Roadmap
 
-Not yet shipped. Want to build one of these? Open an issue with the ["New agent" template](https://github.com/rajeshm71/real-world-agents/issues/new/choose) first: see [CONTRIBUTING.md](CONTRIBUTING.md) for why (mainly: avoiding wasted work on something that doesn't clear the real-world-use-case or technique-variety bar).
-
-| # | Agent | Technique demonstrated | Framework | Real use case |
-|---|---|---|---|---|
-| 12 | Interview prep agent | Adaptive Q&A generation from a JD | OpenAI Agents SDK | Job seekers |
+Nothing queued right now -- v1's committed slots have all shipped. Have an idea for an agent that clears the bar (a real-world use case demonstrating a technique not yet in the catalog)? Open an issue with the ["New agent" template](https://github.com/rajeshm71/real-world-agents/issues/new/choose): see [CONTRIBUTING.md](CONTRIBUTING.md) for why (mainly: avoiding wasted work on something that doesn't clear the real-world-use-case or technique-variety bar).
 
 ## Quick start
 
@@ -56,6 +53,8 @@ No API key is required to explore the code or run tests: every test suite runs u
 - **#11 resume_screener** → default `qwen2.5:7b` (structured extraction over ~4KB JD+resume prompts; `ollama pull qwen2.5:7b`).
 
 **Vision agents on Ollama need the shipped nothink proxy** because Ollama's OpenAI-compat surface can't raise `num_ctx` per-request, and receipt/UI/card images tokenize to 5-6k. Start `python -m common.ollama_nothink_proxy` in another shell, then set `OLLAMA_HOST=http://127.0.0.1:11435` before running any of #01, #09, #15. Same proxy also unlocks qwen3.x reasoning models (which otherwise blow their token budget in hidden `<think>` blocks).
+
+**#12 (interview prep)** wires `LLM_PROVIDER=ollama` through the same pattern as #04, and has been manually verified live end-to-end against three local models (`gemma4:e4b`, `qwen2.5vl:7b`, `qwen2.5:7b`) -- see its README's "Where this fails" for the per-turn reminder fix that local models needed to score answers reliably.
 
 Anthropic-native agents (#10, #14) still require their cloud provider.
 

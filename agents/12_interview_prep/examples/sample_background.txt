@@ -1,0 +1,9 @@
+Backend engineer, 6 years experience. Last 3 years at a mid-size
+fintech building and owning the merchant payouts service (Python,
+FastAPI, Postgres). Rotated on-call for that service. Have designed
+two major API versions (v1 -> v2) for the same service, including a
+deprecation window for v1 clients. Comfortable with Postgres query
+optimization and have run a few large backfill migrations. Less
+hands-on with formal compliance work (PCI-DSS audits handled by a
+separate security team at my current company) but worked closely
+with that team on data-handling requirements for card data.
