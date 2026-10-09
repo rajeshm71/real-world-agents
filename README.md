@@ -8,7 +8,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 
 ## Project status
 
-**17 agents shipped.** The v1 catalog (#01-#16) is complete; #17 is the first v2 addition. Together they cover structured extraction (#01, #09, #15), long-context single-pass (#02), state-machine agents (#03), ReAct with grounded tools (#04, #08), multi-agent collaboration (#05), type-safe dependency injection (#06), meta-optimization (#07), adaptive multi-turn dialogue (#12), RAG with cross-field-verified citations (#10), batch + ranking (#11), the from-scratch agent loop (#13), audio pipelines (#14), live-web-search fact-checking with a local LLM (#16), and a conditional multi-way fan-out with parallel-branch state merging (#17).
+**18 agents shipped.** The v1 catalog (#01-#16) is complete; #17-#18 are v2 additions. Together they cover structured extraction (#01, #09, #15), long-context single-pass (#02), state-machine agents (#03), ReAct with grounded tools (#04, #08), multi-agent collaboration (#05), type-safe dependency injection (#06), meta-optimization (#07), adaptive multi-turn dialogue (#12), RAG with cross-field-verified citations (#10), batch + ranking (#11), the from-scratch agent loop (#13), audio pipelines (#14), live-web-search fact-checking with a local LLM (#16), a conditional multi-way fan-out with parallel-branch state merging (#17), and a real side-effecting action (an actual email send) bridged across two separate runs by a persisted state file (#18).
 
 ## Shipped agents
 
@@ -31,6 +31,7 @@ A growing catalog of AI agents. Each one teaches exactly ONE technique (structur
 | 15 | [Contact / ID extractor](agents/15_contact_extractor/) | Batch vision extraction + embedding-based dedup + PII-safe redaction (per-field none/hash/redact policy with salted SHA-256) | Instructor + OpenAI vision + fastembed | N/A | KYC / CRM first-pass triage: one photo of a stack of cards -> deduplicated compliance-safe contact list |
 | 16 | [Fact-checker](agents/16_fact_checker/) | Local-LLM claim extraction + live web search with rate-limit-aware multi-provider chain + verdict adjudication with verbatim evidence | Plain Python + Ollama (local `llama3.1:8b`) + Tavily / Brave / DDG fallback chain | N/A | Orators / podcasters / writers spot-checking speech, video, transcripts, or text for outdated numbers, misattributed quotes, and untruths before publishing |
 | 17 | [Marketing compliance triage](agents/17_marketing_compliance_triage/) | Conditional N-way fan-out with a LangGraph reducer merging parallel branches (classify -> dispatch 0-4 specialist reviewers in parallel -> merge) | LangGraph + `common/llm.py` multi-provider | N/A | Marketing teams triaging draft ad copy for applicable regulatory concerns before legal review |
+| 18 | [Sales outreach agent](agents/18_sales_outreach/) | A LangGraph node with a real external side effect (an actual SMTP send), bridged across two separate runs by a persisted lead-state file so a reply can be processed independently, whenever it arrives | LangGraph + `common/llm.py` multi-provider + stdlib smtplib | N/A | Qualify leads, send personalized outreach through your own email account, and handle replies with a code-enforced unsubscribe rule |
 
 ## Roadmap
 

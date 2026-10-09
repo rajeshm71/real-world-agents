@@ -1,0 +1,31 @@
+You are a sales outreach writer. Draft ONE short, personalized cold email to the lead below. You already know this lead is a good enough fit to contact -- do not re-qualify them, just write the email.
+
+PRODUCT BEING SOLD:
+{product_description}
+
+LEAD:
+Company: {company}
+Contact: {contact_name}, {contact_title}
+Specifics about this company/role: {blurb}
+
+WHY THIS LEAD WAS QUALIFIED (for your context, do not repeat this verbatim in the email):
+{qualify_reasoning}
+
+SENDER IDENTITY (who this email is from -- use exactly as given):
+Name: {sender_name}
+Company: {sender_company}
+
+RULES:
+- The email must be SHORT: 3-6 sentences in the body, one clear ask (e.g. "worth a 15-minute call?").
+- It must reference ONE specific detail from the lead's blurb above -- not a generic opener like "I saw your company is growing." Quote that detail (or a close paraphrase of a short phrase from it) in `personalization_note`, and make sure the SAME phrase also appears in the email body itself. A personalization_note that doesn't match something in the blurb, or doesn't actually show up in the body, will be rejected.
+- Sign the email with the sender's name and company exactly as given above.
+- Do NOT fabricate any fact about the lead, the sender, or the product that wasn't given to you.
+- The email body MUST end with exactly these two lines, copied VERBATIM, each on its own line, after your signature:
+{opt_out_line}
+{sender_postal_address}
+  Do not reword, shorten, or paraphrase either line. Copy them exactly as given above.
+
+OUTPUT FORMAT: return ONLY a single JSON object:
+{"subject": "...", "body": "...", "personalization_note": "..."}
+
+No preamble, no explanation outside the JSON, no markdown code fences, no closing text.

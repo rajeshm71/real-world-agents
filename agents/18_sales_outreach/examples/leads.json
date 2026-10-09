@@ -1,0 +1,26 @@
+[
+  {
+    "lead_id": "acme_jdoe",
+    "company": "Acme Robotics",
+    "contact_name": "Jane Doe",
+    "contact_title": "VP of Engineering",
+    "contact_email": "jane.doe@example.com",
+    "blurb": "Just closed a $12M Series B two weeks ago and posted 6 open backend roles on their careers page, specifically mentioning they're scaling their internal tooling team."
+  },
+  {
+    "lead_id": "northwind_msmith",
+    "company": "Northwind Logistics",
+    "contact_name": "Mark Smith",
+    "contact_title": "Director of IT",
+    "contact_email": "mark.smith@example.com",
+    "blurb": "Their engineering blog published a post last month about struggling with flaky CI pipelines slowing down releases."
+  },
+  {
+    "lead_id": "coldlead_anon",
+    "company": "Generic Co",
+    "contact_name": "Sam Lee",
+    "contact_title": "Office Manager",
+    "contact_email": "sam.lee@example.com",
+    "blurb": "A small local print shop with no public information about engineering, tooling, or technical hiring."
+  }
+]

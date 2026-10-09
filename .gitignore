@@ -20,6 +20,10 @@ uv.lock
 # Per-agent last-run dumps (agent-produced JSON dropped next to agent.py)
 agents/*/last_run.json
 
+# Agent #18's cross-invocation lead-tracking state (real local runtime
+# state, not source -- written by phase 1, read by phase 2)
+agents/*/pending_outreach.json
+
 # Per-agent vector-store indexes (built at runtime; not source-controlled)
 agents/*/*.db
 agents/*/*.db.faiss

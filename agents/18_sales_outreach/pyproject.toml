@@ -1,0 +1,40 @@
+[project]
+name = "sales-outreach"
+version = "0.1.0"
+description = "Qualify leads, draft personalized outreach, and actually send it via your own SMTP account -- then classify replies and apply a code-owned unsubscribe override. Agent #18 of real-world-agents."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "real-world-agents",  # for common.llm.get_llm + common.pricing.cost_usd
+    # LangGraph: a node in the phase-1 graph (send_email_node) performs a
+    # REAL external side effect (an SMTP send), the first agent in this
+    # catalog to do so. Same pin as agents #03/#17 (verified 1.2.10 on
+    # PyPI 2026-08-21, stable 1.x API).
+    "langgraph>=1.0",
+    # Multi-provider by default (no single provider hardcoded): all three SDKs
+    # listed explicitly; resolved lazily inside common.llm.get_llm().
+    "openai>=1.50",
+    "anthropic>=0.121",
+    "google-genai>=1.0",
+    "pydantic>=2.5",
+    # No new dependency for the real side effect itself: smtplib + email
+    # are Python stdlib, sufficient for Gmail-App-Password-authenticated
+    # SMTP over STARTTLS (standard, well-documented stdlib usage -- see
+    # README's Setup section for the one manual smoke test still needed
+    # against a real account before this claim is upgraded to verified).
+    # No gradio/ui.py: this agent's two-phase, externally-triggered design
+    # doesn't fit a single-session UI naturally (see README).
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+real-world-agents = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
